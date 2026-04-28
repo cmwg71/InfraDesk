@@ -23,6 +23,23 @@ InfraDesk ist eine modulare Enterprise-IT-Management-Lösung. Das Ziel ist es, i
 - Mobile: Native Apps mit Kamera-Integration.
 - Integrationen: Schnittstellen zu Authentifizierungsdiensten und Passwort-Managern (Bitwarden/Vaultwarden, KeePass/XC, 1Password).
 
+# Repository-Struktur
+
+InfraDesk/
+├── .github/                   # GitHub-spezifische Konfigurationen
+├── docs/                      # Die gesamte Planung & Dokumentation (Stufe 0-4)
+├── src/                       # Quellcode (Clean Architecture & MVVM)
+│   ├── InfraDesk.Core/        # [Models] Domänenentitäten
+│   ├── InfraDesk.Application/ # Use Cases & Interfaces
+│   ├── InfraDesk.Infrastructure/ # Datenzugriff (EF Core)
+│   ├── InfraDesk.API/         # ASP.NET Core Web-API
+│   ├── InfraDesk.UI.WinUI/    # [MVVM Client] WinUI 3 App
+│   └── InfraDesk.sln          # Visual Studio Solution
+├── tests/                     # Unit- & Integrationstests
+├── scripts/                   # Inno Setup & PowerShell Scripte
+├── .gitignore                 # Visual Studio & WinUI spezifisch
+└── README.md                  # Projekt-Einstiegspunkt
+
 # InfraDesk - Dokumentations-Index (Master-Backlog)
 
 Dieser Index listet alle Dateien auf, die im Rahmen der Projektierung von InfraDesk erstellt wurden. Die Struktur folgt der im PowerShell-Skript definierten Ordnerhierarchie.
