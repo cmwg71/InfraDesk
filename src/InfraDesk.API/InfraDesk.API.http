@@ -1,0 +1,6 @@
+@InfraDesk.API_HostAddress = http://localhost:5030
+
+GET {{InfraDesk.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

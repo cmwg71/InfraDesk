@@ -1,0 +1,20 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="InfraDesk.API/InfraDesk.API.csproj" Id="9b6d8355-e163-4a8e-b775-ecd962145893" />
+  <Project Path="InfraDesk.Application/InfraDesk.Application.csproj" Id="a06f5e46-6064-47bb-8bca-86dcccd25099" />
+  <Project Path="InfraDesk.Core/InfraDesk.Core.csproj" Id="ac8fb047-4b2b-4a2a-bc95-c28a7f40122f" />
+  <Project Path="InfraDesk.Infrastructure/InfraDesk.Infrastructure.csproj" Id="a33f3bd2-5996-42bb-96d6-92919cf9801b" />
+  <Project Path="InfraDesk.UI.WinUI/InfraDesk.UI.WinUI (Package)/InfraDesk.UI.WinUI (Package).wapproj" Type="c7167f0d-bc9f-4e6e-afe1-012c56b48db5">
+    <Deploy />
+  </Project>
+  <Project Path="InfraDesk.UI.WinUI/InfraDesk.UI.WinUI/InfraDesk.UI.WinUI.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
+  </Project>
+  <Project Path="InfraDesk.Worker/InfraDesk.Worker.csproj" Id="3dd0a565-7220-4cdf-9e9b-c9bfe09d5ba6" />
+</Solution>
