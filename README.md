@@ -25,6 +25,7 @@ InfraDesk ist eine modulare Enterprise-IT-Management-Lösung. Das Ziel ist es, i
 
 # Repository-Struktur
 
+```
 InfraDesk/
 ├── .github/                   # GitHub-spezifische Konfigurationen
 ├── docs/                      # Die gesamte Planung & Dokumentation (Stufe 0-4)
@@ -39,6 +40,7 @@ InfraDesk/
 ├── scripts/                   # Inno Setup & PowerShell Scripte
 ├── .gitignore                 # Visual Studio & WinUI spezifisch
 └── README.md                  # Projekt-Einstiegspunkt
+```
 
 # InfraDesk - Dokumentations-Index (Master-Backlog)
 
