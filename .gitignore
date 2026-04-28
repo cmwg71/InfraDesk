@@ -1,0 +1,60 @@
+.gitignore für InfraDesk (WinUI 3, .NET 8, PostgreSQL)
+
+--- [ .NET & Visual Studio ] ---
+
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+--- [ WinUI 3 / Windows App SDK ] ---
+
+Exkludiert generierte Dateien aus dem Build-Prozess
+
+Generated\ Files/
+_Resharper*/
+*.VC.db
+*.VC.opendb
+
+--- [ Secrets & Lokale Konfiguration ] ---
+
+Verhindert, dass Passwörter oder lokale Dev-Settings im Repo landen
+
+appsettings.Development.json
+*.pfx
+*.snk
+*.p12
+.env
+secrets.json
+
+--- [ Datenbank (PostgreSQL & EF Core) ] ---
+
+Falls lokale DB-Logs oder Migrations-Skripte (temporär) erstellt werden
+
+*.log
+
+EF Core Migration Bundle Binaries
+
+efbundle*
+
+--- [ Deployment (Inno Setup) ] ---
+
+Exkludiert die von Inno Setup generierten Output-Ordner
+
+Output/
+_is*
+
+--- [ Betriebssystem-Müll ] ---
+
+.DS_Store
+Thumbs.db
+
+--- [ Pakete ] ---
+
+NuGet Pakete werden beim Build wiederhergestellt
+
+*.nupkg
+packages/
