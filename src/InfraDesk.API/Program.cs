@@ -1,4 +1,12 @@
+// Importiere deine Schichten
+using InfraDesk.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Hier rufen wir die Methode auf, die wir vorhin in der Infrastructure erstellt haben
+builder.Services.AddInfrastructure(builder.Configuration);
+
+// ... restlicher Standardcode (AddControllers, etc.)
 
 // Add services to the container.
 
