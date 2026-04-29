@@ -1,22 +1,24 @@
-﻿using System;                            // Für Guid
-using InfraDesk.Core.Common;             // Für BaseEntity (da diese im Unterordner 'Common' liegt)
-// Hinweis: 'AssetType' und 'Manufacturer' brauchen kein 'using', 
-// wenn sie im selben Namespace 'InfraDesk.Core.Entities' liegen.
-
+﻿using InfraDesk.Core.Common;
 namespace InfraDesk.Core.Entities;
 
 public class Asset : BaseEntity
 {
+    public Guid TenantId { get; set; }
     public required string Name { get; set; }
     public string? SerialNumber { get; set; }
     public string? InventoryNumber { get; set; }
 
-    // Verknüpfungen
     public Guid AssetTypeId { get; set; }
-    public AssetType? AssetType { get; set; } // Jetzt bekannt, da AssetType.cs existiert
+    public AssetType? AssetType { get; set; }
 
     public Guid? ManufacturerId { get; set; }
     public Manufacturer? Manufacturer { get; set; }
+
+    public Guid? LocationId { get; set; }
+    public Location? Location { get; set; }
+
+    public Guid? OwnerId { get; set; }
+    public Person? Owner { get; set; }
 
     public string DynamicDataJson { get; set; } = "{}";
 }
