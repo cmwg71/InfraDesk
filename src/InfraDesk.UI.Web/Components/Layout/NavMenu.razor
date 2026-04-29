@@ -1,0 +1,14 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Layout/NavMenu.razor *@
+@using MudBlazor
+
+<MudNavMenu>
+    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+    
+    <MudNavGroup Title="Support" Icon="@Icons.Material.Filled.SupportAgent" Expanded="true">
+        <MudNavLink Href="tickets" Icon="@Icons.Material.Filled.ConfirmationNumber">Ticket-Queue</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Infrastruktur" Icon="@Icons.Material.Filled.Computer" Expanded="true">
+        <MudNavLink Href="assets" Icon="@Icons.Material.Filled.Dns">Asset-CMDB</MudNavLink>
+    </MudNavGroup>
+</MudNavMenu>

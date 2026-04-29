@@ -1,8 +1,19 @@
 ﻿using InfraDesk.Core.Common;
+using System;
+using System.Diagnostics.CodeAnalysis;
+
 namespace InfraDesk.Core.Entities;
 
 public class Person : BaseEntity
 {
+    [SetsRequiredMembers]
+    public Person() 
+    { 
+        // Person hat zwei erforderliche Felder!
+        FirstName = null!; 
+        LastName = null!;
+    } 
+
     public Guid TenantId { get; set; }
     public required string FirstName { get; set; }
     public required string LastName { get; set; }
