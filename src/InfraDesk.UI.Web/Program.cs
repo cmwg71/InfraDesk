@@ -1,18 +1,21 @@
 // Dateipfad: src/InfraDesk.UI.Web/Program.cs
 using InfraDesk.UI.Web.Components;
+using InfraDesk.UI.Web.Services;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Fügt Razor Components für den Server-Modus hinzu
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// 1. MudBlazor UI Services registrieren
 builder.Services.AddMudServices();
 
-// 2. HttpClient registrieren, um mit unserer bestehenden InfraDesk.API zu kommunizieren
+// 1. ThemeService als Scoped registrieren (pro Benutzer-Session)
+builder.Services.AddScoped<ThemeService>();
+
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri("https://localhost:7274/") });
+
+builder.Services.AddScoped<UpdateService>();
 
 var app = builder.Build();
 

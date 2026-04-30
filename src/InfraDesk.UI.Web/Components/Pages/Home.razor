@@ -1,7 +1,29 @@
-﻿@page "/"
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Home.razor *@
+@page "/"
+@using MudBlazor
 
-<PageTitle>Home</PageTitle>
+@* FIX: Statischer Titel für das Dashboard *@
+<PageTitle>InfraDesk - Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<MudText Typo="Typo.h4" Class="mb-4">Willkommen bei InfraDesk</MudText>
 
-Welcome to your new app.
+<MudGrid>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4" Style="height:100px;">
+            <MudText Typo="Typo.h6">Assets gesamt</MudText>
+            <MudText Typo="Typo.h4">250+</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4" Style="height:100px;">
+            <MudText Typo="Typo.h6">Offene Tickets</MudText>
+            <MudText Typo="Typo.h4">12</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4" Style="height:100px;">
+            <MudText Typo="Typo.h6">System-Status</MudText>
+            <MudText Typo="Typo.h4" Color="Color.Success">Optimal</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>

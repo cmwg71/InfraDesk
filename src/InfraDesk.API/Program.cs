@@ -1,23 +1,33 @@
-// Importiere deine Schichten
-using InfraDesk.Infrastructure;
+// Dateipfad: src/InfraDesk.API/Program.cs
+using InfraDesk.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Hier rufen wir die Methode auf, die wir vorhin in der Infrastructure erstellt haben
-builder.Services.AddInfrastructure(builder.Configuration);
+// NEU: IgnoreCycles verhindert, dass JSON-Endlosschleifen beim IPAM auftreten
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+});
 
-// ... restlicher Standardcode (AddControllers, etc.)
-
-// Add services to the container.
-
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// --- DbSeeder Aufruf ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<ApplicationDbContext>();
+    context.Database.EnsureCreated(); // Stellt sicher, dass DB existiert
+    await DbSeeder.SeedAsync(context); // Füllt Demodaten (inkl. IPAM)
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -25,9 +35,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

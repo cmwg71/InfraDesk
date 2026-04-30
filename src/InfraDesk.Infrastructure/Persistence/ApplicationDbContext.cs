@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// Dateipfad: src/InfraDesk.Infrastructure/Persistence/ApplicationDbContext.cs
+using Microsoft.EntityFrameworkCore;
 using InfraDesk.Core.Entities;
 
 namespace InfraDesk.Infrastructure.Persistence;
@@ -20,17 +21,18 @@ public class ApplicationDbContext : DbContext
     public DbSet<Software> Softwares { get; set; }
     public DbSet<License> Licenses { get; set; }
     public DbSet<Ticket> Tickets { get; set; }
+    public DbSet<Subnet> Subnets { get; set; }
+    public DbSet<IpAddress> IpAddresses { get; set; }
+    public DbSet<SystemSetting> SystemSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // 1. JSONB Konfiguration für PostgreSQL
+        // 1. PostgreSQL JSONB Konfiguration
         modelBuilder.Entity<Asset>().Property(b => b.DynamicDataJson).HasColumnType("jsonb");
 
-        // 2. Beziehung auflösen: Person <-> Team
-        // Wir definieren hier zwei separate 1:n Beziehungen, um die 1:1 Mehrdeutigkeit zu vermeiden.
-
+        // 2. Stammdaten-Beziehungen
         modelBuilder.Entity<Person>()
             .HasOne(p => p.Team)
             .WithMany()
@@ -43,95 +45,22 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(t => t.LeadId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // --- MEGA SEED DATA ---
+        // 3. IPAM Beziehungen
+        modelBuilder.Entity<IpAddress>()
+            .HasOne(i => i.AssignedAsset)
+            .WithMany(a => a.NetworkInterfaces)
+            .HasForeignKey(i => i.AssignedAssetId)
+            .OnDelete(DeleteBehavior.SetNull);
 
-        // Mandant
-        var tenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        modelBuilder.Entity<Tenant>().HasData(
-            new Tenant { Id = tenantId, Name = "Musterfirma GmbH", Domain = "musterfirma.de" }
-        );
+        modelBuilder.Entity<IpAddress>()
+            .HasOne(i => i.Subnet)
+            .WithMany(s => s.IpAddresses)
+            .HasForeignKey(i => i.SubnetId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        // Standorte
-        var locBerlin = Guid.NewGuid();
-        var locServerRoom = Guid.NewGuid();
-        modelBuilder.Entity<Location>().HasData(
-            new Location { Id = locBerlin, TenantId = tenantId, Name = "Hauptsitz Berlin", Address = "Musterstraße 1" },
-            new Location { Id = locServerRoom, TenantId = tenantId, Name = "Serverraum 01", RoomNumber = "UG-01", ParentLocationId = locBerlin }
-        );
-
-        // IDs für Team und Admin vorab festlegen
-        var teamItId = Guid.NewGuid();
-        var adminId = Guid.NewGuid();
-
-        // 3. Team SEED
-        // WICHTIG: Wir lassen LeadId hier leer (null), um den zirkulären Bezug beim Seeding zu brechen.
-        // In einer echten App würde der Leiter später über die UI zugewiesen.
-        modelBuilder.Entity<Team>().HasData(
-            new Team
-            {
-                Id = teamItId,
-                TenantId = tenantId,
-                Name = "IT-Administration",
-                LeadId = null
-            }
-        );
-
-        // 4. Person SEED
-        modelBuilder.Entity<Person>().HasData(
-            new Person
-            {
-                Id = adminId,
-                TenantId = tenantId,
-                FirstName = "Max",
-                LastName = "Admin",
-                Email = "m.admin@musterfirma.de",
-                TeamId = teamItId
-            }
-        );
-
-        // 5. Hersteller & Typen
-        var dellId = Guid.NewGuid();
-        var typeServer = Guid.NewGuid();
-        var typeLaptop = Guid.NewGuid();
-        modelBuilder.Entity<Manufacturer>().HasData(
-            new Manufacturer { Id = dellId, Name = "Dell Technologies" }
-        );
-        modelBuilder.Entity<AssetType>().HasData(
-            new AssetType { Id = typeServer, Name = "Server", IconKey = "ServerIcon" },
-            new AssetType { Id = typeLaptop, Name = "Laptop", IconKey = "LaptopIcon" }
-        );
-
-        // 6. Assets
-        var assetId = Guid.NewGuid();
-        modelBuilder.Entity<Asset>().HasData(
-            new Asset
-            {
-                Id = assetId,
-                TenantId = tenantId,
-                Name = "SRV-DC-01",
-                SerialNumber = "DELL-12345",
-                InventoryNumber = "INV-0001",
-                AssetTypeId = typeServer,
-                ManufacturerId = dellId,
-                LocationId = locServerRoom,
-                OwnerId = adminId,
-                DynamicDataJson = "{\"CPU\": \"32 Cores\", \"RAM\": \"128GB\", \"OS\": \"Windows Server 2022\"}"
-            }
-        );
-
-        // 7. Tickets
-        modelBuilder.Entity<Ticket>().HasData(
-            new Ticket
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                Title = "Festplattentausch erforderlich",
-                Status = "Open",
-                Priority = "High",
-                RequesterId = adminId,
-                AssignedAssetId = assetId,
-                Description = "Der Server meldet einen defekten Sektor auf Disk 0."
-            }
-        );
+        // 4. Systemeinstellungen (Eindeutiger Key für schnellen Zugriff)
+        modelBuilder.Entity<SystemSetting>()
+            .HasIndex(s => s.Key)
+            .IsUnique();
     }
 }

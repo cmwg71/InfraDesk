@@ -1,57 +1,132 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Layout/MainLayout.razor *@
 @inherits LayoutComponentBase
 @using MudBlazor
+@using InfraDesk.UI.Web.Services
+@inject ThemeService ThemeService
+@implements IDisposable
 
-<!-- Notwendig für Dialoge, Snackbars (Toasts) und das Theme -->
 <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
+<MudPopoverProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1" Color="Color.Primary">
+    <!-- AppBar oben -->
+    <MudAppBar Elevation="1" Style="@AppbarStyle">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-        <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mr-2" />
-        <MudText Typo="Typo.h5" Class="ml-2">InfraDesk</MudText>
+        
+        <img src="InfraDesk_Logo.png" alt="InfraDesk Logo" style="height: 48px; margin-left: 8px; object-fit: contain; display: block;" />
+        
         <MudSpacer />
-        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleDarkMode" />
+        
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit"
+                       OnClick="ToggleDarkMode" />
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+    <!-- Menüspalte (Drawer) -->
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Style="@DrawerStyle">
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-8 pb-8">
+    <!-- Hauptinhaltsbereich: Hier wird @Body gerendert -->
+    <MudMainContent Style="@MainContentStyle">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-8 pb-16">
             @Body
         </MudContainer>
     </MudMainContent>
+
+    <!-- Statusleiste am unteren Rand -->
+    <MudAppBar Bottom="true" Fixed="true" Elevation="4" Dense="true" Style="@StatusBarStyle">
+        
+        <MudLink Href="/settings" Style="color: inherit !important;" Underline="Underline.None" Class="d-flex align-center hover-opacity">
+            <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mr-2" />
+            <MudText Typo="Typo.caption" Class="font-weight-bold">System-Einstellungen</MudText>
+        </MudLink>
+        
+        <MudSpacer />
+        
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Success" Size="Size.Small" />
+            <MudText Typo="Typo.caption">System Online</MudText>
+            
+            <MudDivider Vertical="true" FlexItem="true" Class="mx-2 my-2" Style="border-color: rgba(0,0,0,0.12);" />
+            
+            <MudText Typo="Typo.caption">API: Verbunden</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.Api" Color="Color.Success" Size="Size.Small" />
+        </MudStack>
+    </MudAppBar>
 </MudLayout>
+
+<style>
+    .hover-opacity:hover {
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+    /* Sicherstellen, dass der MainContent immer den Viewport füllt */
+    .mud-main-content {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+</style>
 
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode = false;
-    
-    // Unser Firmen-Theme für InfraDesk (Blau/Grau)
-    private MudTheme _theme = new MudTheme()
-    {
-        PaletteLight = new PaletteLight()
-        {
-            Primary = Colors.Blue.Darken2,
-            AppbarBackground = Colors.Blue.Darken3
-        },
-        PaletteDark = new PaletteDark()
-        {
-            Primary = Colors.Blue.Lighten1
-        }
-    };
+    private MudTheme _theme = new MudTheme();
 
-    void DrawerToggle()
+    // Dynamische Styles als Eigenschaften für bessere Stabilität
+    private string AppbarStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.AppbarColor)} !important; color: {ThemeService.Config.AppbarText} !important;";
+    private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : ThemeService.Config.DrawerColor)} !important; color: {(_isDarkMode ? "#c9d1d9" : ThemeService.Config.DrawerText)} !important;";
+    private string MainContentStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.BackgroundColor)}; transition: background-color 0.3s;";
+    private string StatusBarStyle => $"background-color: {(_isDarkMode ? "#161b22" : "#ffffff")}; color: {(_isDarkMode ? "#bdbdbd" : "#424242")}; border-top: 1px solid {(_isDarkMode ? "#30363d" : "#e0e0e0")};";
+
+    protected override void OnInitialized()
     {
-        _drawerOpen = !_drawerOpen;
+        UpdateTheme();
+        ThemeService.OnThemeChanged += UpdateTheme;
     }
 
-    void ToggleDarkMode()
+    private void UpdateTheme()
     {
-        _isDarkMode = !_isDarkMode;
+        var cfg = ThemeService.Config;
+        
+        // Dark Mode synchronisieren
+        _isDarkMode = cfg.IsDark;
+
+        // Neues Theme-Objekt zur Erzwingung des CSS-Refreshs
+        var newTheme = new MudTheme();
+
+        newTheme.PaletteLight.Primary = cfg.PrimaryColor;
+        newTheme.PaletteLight.Secondary = cfg.SecondaryColor;
+        newTheme.PaletteLight.Background = cfg.BackgroundColor;
+        newTheme.PaletteLight.Surface = cfg.SurfaceColor;
+        newTheme.PaletteLight.AppbarBackground = cfg.AppbarColor;
+        newTheme.PaletteLight.AppbarText = cfg.AppbarText;
+        newTheme.PaletteLight.DrawerBackground = cfg.DrawerColor;
+        newTheme.PaletteLight.DrawerText = cfg.DrawerText;
+        newTheme.PaletteLight.DrawerIcon = cfg.DrawerIcon;
+        newTheme.PaletteLight.TextPrimary = cfg.TextPrimary;
+        newTheme.PaletteLight.ActionDefault = cfg.PrimaryColor;
+
+        newTheme.PaletteDark.Primary = cfg.PrimaryColor;
+        newTheme.PaletteDark.Background = "#0d1117";
+        newTheme.PaletteDark.Surface = "#161b22";
+        newTheme.PaletteDark.TextPrimary = "#c9d1d9";
+
+        // Typografie sicher zuweisen
+        newTheme.Typography.Default.FontFamily = new[] { cfg.FontFamily };
+        newTheme.Typography.Default.FontSize = $"{cfg.BaseFontSize}px";
+        
+        // Zuweisung triggert MudThemeProvider
+        _theme = newTheme;
+
+        InvokeAsync(StateHasChanged);
     }
+
+    void DrawerToggle() => _drawerOpen = !_drawerOpen;
+    void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+
+    public void Dispose() => ThemeService.OnThemeChanged -= UpdateTheme;
 }
