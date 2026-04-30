@@ -3,6 +3,7 @@
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
 @using System.Text.Json
+@using System.Reflection
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject ThemeService ThemeService
@@ -233,7 +234,8 @@
     private Dictionary<string, string> _newStatusInputs = new();
     private Dictionary<string, string> _phaseRenames = new();
 
-    private string _currentVersion = "2026.04.30.045";
+    // Start-Wert, der sofort im OnInitializedAsync überschrieben wird
+    private string _currentVersion = "Lade...";
     private string _gitHubToken = "";
     private bool _isCheckingUpdate = false;
     private bool _newVersionAvailable = false;
@@ -244,6 +246,14 @@
     protected override async Task OnInitializedAsync()
     {
         _themeConfig = ThemeService.Config;
+        
+        // Dynamisches Auslesen der Version aus der aktuellen Assembly
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        if (version != null)
+        {
+            _currentVersion = version.ToString(); // Setzt z.B. 2026.4.30.45
+        }
+
         await LoadLifecycleSettings();
     }
 
