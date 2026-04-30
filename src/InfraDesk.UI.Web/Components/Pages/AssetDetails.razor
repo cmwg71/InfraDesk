@@ -1,0 +1,284 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/AssetDetails.razor *@
+@page "/assets/{Id:guid}"
+@using InfraDesk.Core.Entities
+@using MudBlazor
+@using InfraDesk.UI.Web.Services
+@using System.Text.Json
+@using System.Net.NetworkInformation
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject ThemeService ThemeService
+
+<PageTitle>InfraDesk - @(_asset?.Name ?? "Asset Details")</PageTitle>
+
+@if (_asset == null || _lifecycleConfig == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <!-- Header-Bereich mit Status-Badge und Steuerung -->
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" />
+            <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Large" Color="Color.Primary" />
+            
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h5" Class="font-weight-bold">@_asset.Name</MudText>
+                <MudText Typo="Typo.caption" Style="opacity: 0.6">@_asset.InventoryNumber</MudText>
+            </MudStack>
+
+            <MudChip T="string" Color="@GetStatusColor(_asset.LifecycleStatus)" Size="Size.Small" Class="ml-2">
+                @_asset.LifecycleStatus
+            </MudChip>
+            
+            <MudSpacer />
+            
+            @if (!_isEditMode)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => _isEditMode = true)">Bearbeiten</MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveChanges">Speichern</MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" Class="ml-2" OnClick="CancelEdit">Abbrechen</MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudGrid>
+        <!-- Navigation auf der linken Seite -->
+        <MudItem xs="12" md="3" lg="2">
+            <MudPaper Elevation="1" Class="py-2">
+                <MudNavMenu>
+                    <MudNavLink Icon="@Icons.Material.Filled.Info" OnClick="@(() => _activeTab = "General")"
+                                Class="@(_activeTab == "General" ? "mud-theme-primary" : "")">Computer</MudNavLink>
+                    <MudNavLink Icon="@Icons.Material.Filled.Apps" OnClick="@(() => _activeTab = "Applications")"
+                                Class="@(_activeTab == "Applications" ? "mud-theme-primary" : "")">Applications</MudNavLink>
+                    <MudNavLink Icon="@Icons.Material.Filled.Memory" OnClick="@(() => _activeTab = "Hardware")"
+                                Class="@(_activeTab == "Hardware" ? "mud-theme-primary" : "")">Hardware</MudNavLink>
+                    <MudNavLink Icon="@Icons.Material.Filled.SettingsEthernet" OnClick="@(() => _activeTab = "Network")"
+                                Class="@(_activeTab == "Network" ? "mud-theme-primary" : "")">IPAM & Netzwerk</MudNavLink>
+                </MudNavMenu>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Hauptinhalt auf der rechten Seite -->
+        <MudItem xs="12" md="9" lg="10">
+            <MudPaper Elevation="1" Class="pa-4" Style="min-height: 600px;">
+                @if (_activeTab == "General")
+                {
+                    <MudText Typo="Typo.h6" Class="mb-4">Stammdaten & Status</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" sm="12" md="6">
+                            @if (!_isEditMode)
+                            {
+                                <MudTextField T="string" Label="Lebenszyklus Status" Value="@_asset.LifecycleStatus" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            }
+                            else
+                            {
+                                @* FIX: Korrektur der Style-Attribut-Syntax zur Vermeidung von RZ9986 *@
+                                <MudSelect T="string" Label="Lebenszyklus Status" @bind-Value="_asset.LifecycleStatus"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                           AdornmentColor="@GetStatusColor(_asset.LifecycleStatus)"
+                                           AnchorOrigin="Origin.BottomCenter">
+                                    @{
+                                        int phaseCount = 0;
+                                    }
+                                    @foreach (var phase in _lifecycleConfig)
+                                    {
+                                        string styleStr = (phaseCount > 0 ? "border-top: 1px solid var(--mud-palette-divider); margin-top: 4px; padding-top: 8px; " : "") + "background-color: rgba(0,0,0,0.02); color: var(--mud-palette-primary) !important; opacity: 1 !important;";
+                                        
+                                        <MudSelectItem T="string" Disabled="true" Class="font-weight-bold" Style="@styleStr">
+                                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="text-transform: uppercase; letter-spacing: 1px;">@phase.Key</MudText>
+                                        </MudSelectItem>
+                                        
+                                        @foreach (var status in phase.Value)
+                                        {
+                                            <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
+                                        }
+                                        phaseCount++;
+                                    }
+                                </MudSelect>
+                            }
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6" md="6">
+                            <MudTextField Label="Inventar-Nr." @bind-Value="_asset.InventoryNumber" ReadOnly="@(!_isEditMode)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        
+                        <MudItem xs="12" sm="6" md="6">
+                            <MudTextField Label="Computername" @bind-Value="_asset.Name" ReadOnly="@(!_isEditMode)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        
+                        @foreach (var property in GetJsonProperties("General"))
+                        {
+                            <MudItem xs="12" sm="6" md="6">
+                                <MudTextField T="string" Label="@property.Key" Value="@property.Value" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else if (_activeTab == "Hardware")
+                {
+                    <MudText Typo="Typo.h6" Class="mb-4">Hardware Details</MudText>
+                    <MudGrid>
+                        @foreach (var property in GetJsonProperties("Hardware"))
+                        {
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudTextField T="string" Label="@property.Key" Value="@property.Value" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else if (_activeTab == "Applications")
+                {
+                    <MudText Typo="Typo.h6" Class="mb-4">Installierte Software</MudText>
+                    <MudDataGrid T="JsonElement" Items="@GetJsonArray("Applications")" Dense="true" Hover="true">
+                        <Columns>
+                            <PropertyColumn Property="@(x => GetJsonValue(x, "Name"))" Title="Name" />
+                            <PropertyColumn Property="@(x => GetJsonValue(x, "Version"))" Title="Version" />
+                            <PropertyColumn Property="@(x => GetJsonValue(x, "Publisher"))" Title="Publisher" />
+                        </Columns>
+                    </MudDataGrid>
+                }
+                else if (_activeTab == "Network")
+                {
+                    <MudText Typo="Typo.h6" Class="mb-4">Netzwerk-Schnittstellen</MudText>
+                    <MudDataGrid T="IpAddress" Items="@_asset.NetworkInterfaces" Dense="true" Hover="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Subnet != null ? x.Subnet.Name : string.Empty" Title="Subnetz" />
+                            <PropertyColumn Property="x => x.MacAddress" Title="MAC Adresse" />
+                            <PropertyColumn Property="x => x.Address" Title="IP Adresse" />
+                            <TemplateColumn Title="Aktionen">
+                                <CellTemplate>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.WifiTethering"
+                                               OnClick="@(() => PingDeviceAsync(context.Item.Address))">Ping</MudButton>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </MudDataGrid>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private Asset? _asset;
+    private JsonElement _dynamicData;
+    private string _activeTab = "General";
+    private bool _isEditMode = false;
+
+    private Dictionary<string, List<string>>? _lifecycleConfig;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLifecycleConfiguration();
+        await LoadAssetData();
+    }
+
+    private async Task LoadLifecycleConfiguration()
+    {
+        try
+        {
+            var config = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/asset-lifecycle");
+            if (config != null) _lifecycleConfig = config;
+        }
+        catch
+        {
+            _lifecycleConfig = new() {
+                { "1. Planung & Design", new() { "Bedarf gemeldet", "Genehmigt", "Geplant", "In Bestellung" } },
+                { "2. Beschaffung & Vorbereitung", new() { "Erhalten", "Lagernd", "In Vorbereitung", "In Prüfung / QS" } },
+                { "3. Implementierung", new() { "In Installation", "Reserviert", "In Rollout" } },
+                { "4. Betriebsphase", new() { "Produktiv", "In Wartung", "Gestört", "In Reparatur", "Nicht Verfügbar", "Leihgabe" } },
+                { "5. Außerbetriebnahme", new() { "Abkündigungsphase", "In Außerbetriebnahme", "Ausgemustert", "Archiviert", "Entsorgt", "Verkauft", "Verloren / Gestohlen" } }
+            };
+        }
+    }
+
+    private async Task LoadAssetData()
+    {
+        try
+        {
+            _asset = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}");
+            if (_asset != null && !string.IsNullOrWhiteSpace(_asset.DynamicDataJson))
+            {
+                using var doc = JsonDocument.Parse(_asset.DynamicDataJson);
+                _dynamicData = doc.RootElement.Clone();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Fehler beim Laden: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        if (string.IsNullOrEmpty(status)) return Color.Default;
+        if (status == "Produktiv") return Color.Success;
+        if (status == "Gestört" || status == "Verloren / Gestohlen" || status == "In Reparatur") return Color.Error;
+        if (status.Contains("In") || status.Contains("phase") || status == "Reserviert") return Color.Warning;
+        if (status == "Lagernd" || status == "Geplant" || status == "Erhalten") return Color.Info;
+        return Color.Default;
+    }
+
+    private async Task SaveChanges()
+    {
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/assets/{Id}", _asset);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Änderungen gespeichert!", Severity.Success);
+                _isEditMode = false;
+            }
+            else
+            {
+                Snackbar.Add("Fehler beim Speichern.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"API-Fehler: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private async Task CancelEdit() { _isEditMode = false; await LoadAssetData(); }
+
+    private async Task PingDeviceAsync(string ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip)) return;
+        Snackbar.Add($"Ping an {ip}...", Severity.Info);
+        try
+        {
+            using var ping = new Ping();
+            var reply = await ping.SendPingAsync(ip, 2000);
+            if (reply.Status == IPStatus.Success) Snackbar.Add($"Erfolg! {reply.RoundtripTime}ms", Severity.Success);
+            else Snackbar.Add($"Fehler: {reply.Status}", Severity.Error);
+        }
+        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
+    }
+
+    private string GetJsonValue(JsonElement el, string propName) =>
+        el.ValueKind == JsonValueKind.Object && el.TryGetProperty(propName, out var p) ? p.ToString() : string.Empty;
+
+    private Dictionary<string, string> GetJsonProperties(string section)
+    {
+        var result = new Dictionary<string, string>();
+        if (_dynamicData.ValueKind == JsonValueKind.Object && _dynamicData.TryGetProperty(section, out var sEl))
+            foreach (var p in sEl.EnumerateObject()) result[p.Name] = p.Value.ToString();
+        return result;
+    }
+
+    private List<JsonElement> GetJsonArray(string section)
+    {
+        var result = new List<JsonElement>();
+        if (_dynamicData.ValueKind == JsonValueKind.Object && _dynamicData.TryGetProperty(section, out var sEl) && sEl.ValueKind == JsonValueKind.Array)
+            foreach (var i in sEl.EnumerateArray()) result.Add(i);
+        return result;
+    }
+}

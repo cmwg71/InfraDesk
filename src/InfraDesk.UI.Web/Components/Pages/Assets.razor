@@ -1,0 +1,128 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Assets.razor *@
+@page "/assets"
+@using InfraDesk.Core.Entities
+@using MudBlazor
+@using System.Text.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>InfraDesk - Asset-CMDB</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Asset-CMDB</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Asset</MudButton>
+</MudStack>
+
+@if (_assets == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <MudDataGrid T="Asset" Items="@_assets" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickFilter" Hideable="true" Dense="true">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchString" Placeholder="Suchen (Name, IP, MAC, Inventar-Nr.)..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
+        </ToolBarContent>
+        <Columns>
+            <TemplateColumn Title="OS" Sortable="false" Filterable="false" HeaderStyle="width: 60px;">
+                <CellTemplate>
+                    @{
+                        var os = GetDynamicValue(context.Item.DynamicDataJson, "General", "OS");
+                        string icon = Icons.Material.Filled.DesktopWindows;
+                        if (os.Contains("Ubuntu") || os.Contains("Linux")) icon = Icons.Custom.Brands.Linux;
+                        else if (os.Contains("iOS") || os.Contains("Mac")) icon = Icons.Custom.Brands.Apple;
+                        else if (context.Item.AssetType?.Name == "Switch") icon = Icons.Material.Filled.Router;
+                        else if (context.Item.AssetType?.Name == "Printer") icon = Icons.Material.Filled.Print;
+                    }
+                    <MudTooltip Text="@(string.IsNullOrWhiteSpace(os) ? "Unbekannt" : os)">
+                        <MudIcon Icon="@icon" Size="Size.Small" Color="Color.Default" />
+                    </MudTooltip>
+                </CellTemplate>
+            </TemplateColumn>
+            
+            <PropertyColumn Property="x => x.Name" Title="Computername" />
+            
+            <TemplateColumn Title="IP Adresse" Sortable="false" Filterable="false">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2">@GetPrimaryIpAddress(context.Item)</MudText>
+                </CellTemplate>
+            </TemplateColumn>
+
+            <TemplateColumn Title="MAC Adresse" Sortable="false" Filterable="false" Hidden="true">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@GetPrimaryMacAddress(context.Item)</MudText>
+                </CellTemplate>
+            </TemplateColumn>
+            
+            <PropertyColumn Property="x => x.InventoryNumber" Title="Inventar-Nr." />
+            <PropertyColumn Property="x => x.AssetType != null ? x.AssetType.Name : string.Empty" Title="Typ" />
+            <PropertyColumn Property="x => x.Location != null ? x.Location.Name : string.Empty" Title="Standort" />
+        </Columns>
+        <PagerContent>
+            <MudDataGridPager T="Asset" RowsPerPageString="Einträge pro Seite:" PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    private List<Asset>? _assets;
+    private string _searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
+    }
+
+    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args)
+    {
+        Nav.NavigateTo($"/assets/{args.Item.Id}");
+    }
+
+    private string GetDynamicValue(string json, string section, string property)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty(section, out var sec) && sec.TryGetProperty(property, out var prop))
+                return prop.ToString() ?? string.Empty;
+        }
+        catch { }
+        return string.Empty;
+    }
+
+    private string GetPrimaryIpAddress(Asset asset)
+    {
+        if (asset.NetworkInterfaces != null && asset.NetworkInterfaces.Any())
+        {
+            var ips = asset.NetworkInterfaces.Where(n => !string.IsNullOrWhiteSpace(n.Address)).Select(n => n.Address);
+            if (ips.Any()) return string.Join(", ", ips);
+        }
+        var fallbackIp = GetDynamicValue(asset.DynamicDataJson, "General", "IPAddress");
+        return !string.IsNullOrWhiteSpace(fallbackIp) ? fallbackIp : "Keine IP";
+    }
+
+    private string GetPrimaryMacAddress(Asset asset)
+    {
+        if (asset.NetworkInterfaces != null && asset.NetworkInterfaces.Any())
+        {
+            var macs = asset.NetworkInterfaces.Where(n => !string.IsNullOrWhiteSpace(n.MacAddress)).Select(n => n.MacAddress);
+            if (macs.Any()) return string.Join(", ", macs);
+        }
+        var fallbackMac = GetDynamicValue(asset.DynamicDataJson, "General", "MACAddress");
+        return !string.IsNullOrWhiteSpace(fallbackMac) ? fallbackMac : "-";
+    }
+
+    private Func<Asset, bool> QuickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (x.InventoryNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (GetPrimaryIpAddress(x).Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (GetPrimaryMacAddress(x).Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    };
+}
