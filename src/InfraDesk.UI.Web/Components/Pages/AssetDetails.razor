@@ -2,283 +2,275 @@
 @page "/assets/{Id:guid}"
 @using InfraDesk.Core.Entities
 @using MudBlazor
-@using InfraDesk.UI.Web.Services
 @using System.Text.Json
-@using System.Net.NetworkInformation
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
-@inject ThemeService ThemeService
 
-<PageTitle>InfraDesk - @(_asset?.Name ?? "Asset Details")</PageTitle>
+<style>
+    /* PDQ Inventory Style: High Density Property Grid */
+    .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; }
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 4px; }
+    .pdq-grid { display: grid; grid-template-columns: 210px 1fr; border-top: 1px solid #e8e8e8; font-size: 0.8rem; }
+    .pdq-label { background-color: #f6f6f6; padding: 4px 10px; font-weight: 600; color: #555; border-right: 1px solid #e8e8e8; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
+    .pdq-value { background-color: #fff; padding: 4px 10px; border-bottom: 1px solid #e8e8e8; color: #000; display: flex; align-items: center; min-height: 26px; }
+    .pdq-section-header { background-color: #e0e0e0; padding: 3px 12px; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; border-bottom: 1px solid #ccc; color: #333; margin-top: 12px; }
+    .pdq-section-header:first-child { margin-top: 0; }
+    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 8px; }
+</style>
 
-@if (_asset == null || _lifecycleConfig == null)
-{
-    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-}
-else
-{
-    <!-- Header-Bereich mit Status-Badge und Steuerung -->
-    <MudPaper Class="pa-4 mb-4" Elevation="1">
-        <MudStack Row="true" AlignItems="AlignItems.Center">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" />
-            <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Large" Color="Color.Primary" />
-            
-            <MudStack Spacing="0">
-                <MudText Typo="Typo.h5" Class="font-weight-bold">@_asset.Name</MudText>
-                <MudText Typo="Typo.caption" Style="opacity: 0.6">@_asset.InventoryNumber</MudText>
-            </MudStack>
+@if (_isLoading) {
+    <div class="d-flex justify-center align-center" style="height: 100vh;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+} else if (_asset != null) {
+    <div class="pdq-toolbar">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" Size="Size.Small" Class="mr-2" />
+        <MudIcon Icon="@GetIcon(_asset.AssetType?.Name)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+        <MudText Typo="Typo.body2" Class="font-weight-bold">@_asset.Name (@(_asset.AssetType?.Name))</MudText>
+        <MudSpacer />
+        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Class="mr-2">@_asset.LifecycleStatus</MudChip>
+        <MudButton StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => _isEditMode = true)" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" Style="text-transform:none">Bearbeiten</MudButton>
+    </div>
 
-            <MudChip T="string" Color="@GetStatusColor(_asset.LifecycleStatus)" Size="Size.Small" Class="ml-2">
-                @_asset.LifecycleStatus
-            </MudChip>
-            
-            <MudSpacer />
-            
-            @if (!_isEditMode)
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => _isEditMode = true)">Bearbeiten</MudButton>
-            }
-            else
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveChanges">Speichern</MudButton>
-                <MudButton Variant="Variant.Text" Color="Color.Default" Class="ml-2" OnClick="CancelEdit">Abbrechen</MudButton>
-            }
-        </MudStack>
-    </MudPaper>
+    <div class="pdq-container">
+        <div class="pdq-sidebar">
+            <MudNavMenu Margin="Margin.Dense" Rounded="false">
+                <div class="pdq-section-header">Informationen</div>
+                <MudNavLink OnClick="@(() => _activeTab = "General")" Class="@(_activeTab == "General" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Info">Übersicht</MudNavLink>
+                
+                @if (IsCategory("Hardware") || IsCategory("Datacenter") || IsCategory("Storage")) {
+                    <MudNavLink OnClick="@(() => _activeTab = "Hardware")" Class="@(_activeTab == "Hardware" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Memory">Technische Daten</MudNavLink>
+                }
+                @if (IsCategory("Network")) {
+                    <MudNavLink OnClick="@(() => _activeTab = "Network")" Class="@(_activeTab == "Network" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SettingsInputComponent">Port-Belegung</MudNavLink>
+                }
+                
+                @if (!IsCategory("Service") && !IsCategory("License") && !IsCategory("Geo") && !IsCategory("Org")) {
+                    <MudNavLink OnClick="@(() => _activeTab = "Software")" Class="@(_activeTab == "Software" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Code">Software & IP-Stack</MudNavLink>
+                    <MudNavLink OnClick="@(() => _activeTab = "AD")" Class="@(_activeTab == "AD" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.VerifiedUser">Identität / AD</MudNavLink>
+                }
 
-    <MudGrid>
-        <!-- Navigation auf der linken Seite -->
-        <MudItem xs="12" md="3" lg="2">
-            <MudPaper Elevation="1" Class="py-2">
-                <MudNavMenu>
-                    <MudNavLink Icon="@Icons.Material.Filled.Info" OnClick="@(() => _activeTab = "General")"
-                                Class="@(_activeTab == "General" ? "mud-theme-primary" : "")">Computer</MudNavLink>
-                    <MudNavLink Icon="@Icons.Material.Filled.Apps" OnClick="@(() => _activeTab = "Applications")"
-                                Class="@(_activeTab == "Applications" ? "mud-theme-primary" : "")">Applications</MudNavLink>
-                    <MudNavLink Icon="@Icons.Material.Filled.Memory" OnClick="@(() => _activeTab = "Hardware")"
-                                Class="@(_activeTab == "Hardware" ? "mud-theme-primary" : "")">Hardware</MudNavLink>
-                    <MudNavLink Icon="@Icons.Material.Filled.SettingsEthernet" OnClick="@(() => _activeTab = "Network")"
-                                Class="@(_activeTab == "Network" ? "mud-theme-primary" : "")">IPAM & Netzwerk</MudNavLink>
-                </MudNavMenu>
-            </MudPaper>
-        </MudItem>
+                @if (IsCategory("Service")) {
+                    <MudNavLink OnClick="@(() => _activeTab = "ServiceDetails")" Class="@(_activeTab == "ServiceDetails" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.AutoAwesome">Service-Level</MudNavLink>
+                }
 
-        <!-- Hauptinhalt auf der rechten Seite -->
-        <MudItem xs="12" md="9" lg="10">
-            <MudPaper Elevation="1" Class="pa-4" Style="min-height: 600px;">
-                @if (_activeTab == "General")
-                {
-                    <MudText Typo="Typo.h6" Class="mb-4">Stammdaten & Status</MudText>
-                    <MudGrid>
-                        <MudItem xs="12" sm="12" md="6">
-                            @if (!_isEditMode)
-                            {
-                                <MudTextField T="string" Label="Lebenszyklus Status" Value="@_asset.LifecycleStatus" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            }
-                            else
-                            {
-                                @* FIX: Korrektur der Style-Attribut-Syntax zur Vermeidung von RZ9986 *@
-                                <MudSelect T="string" Label="Lebenszyklus Status" @bind-Value="_asset.LifecycleStatus"
-                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                           AdornmentColor="@GetStatusColor(_asset.LifecycleStatus)"
-                                           AnchorOrigin="Origin.BottomCenter">
-                                    @{
-                                        int phaseCount = 0;
-                                    }
-                                    @foreach (var phase in _lifecycleConfig)
-                                    {
-                                        string styleStr = (phaseCount > 0 ? "border-top: 1px solid var(--mud-palette-divider); margin-top: 4px; padding-top: 8px; " : "") + "background-color: rgba(0,0,0,0.02); color: var(--mud-palette-primary) !important; opacity: 1 !important;";
-                                        
-                                        <MudSelectItem T="string" Disabled="true" Class="font-weight-bold" Style="@styleStr">
-                                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="text-transform: uppercase; letter-spacing: 1px;">@phase.Key</MudText>
-                                        </MudSelectItem>
-                                        
-                                        @foreach (var status in phase.Value)
-                                        {
-                                            <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
-                                        }
-                                        phaseCount++;
-                                    }
-                                </MudSelect>
-                            }
-                        </MudItem>
+                <div class="pdq-section-header">Management</div>
+                <MudNavLink OnClick="@(() => _activeTab = "History")" Class="@(_activeTab == "History" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.History">Audit-Log</MudNavLink>
+            </MudNavMenu>
+        </div>
 
-                        <MudItem xs="12" sm="6" md="6">
-                            <MudTextField Label="Inventar-Nr." @bind-Value="_asset.InventoryNumber" ReadOnly="@(!_isEditMode)" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                        </MudItem>
-                        
-                        <MudItem xs="12" sm="6" md="6">
-                            <MudTextField Label="Computername" @bind-Value="_asset.Name" ReadOnly="@(!_isEditMode)" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                        </MudItem>
-                        
-                        @foreach (var property in GetJsonProperties("General"))
-                        {
-                            <MudItem xs="12" sm="6" md="6">
-                                <MudTextField T="string" Label="@property.Key" Value="@property.Value" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </MudItem>
+        <div class="pdq-content">
+            @if (_activeTab == "General") {
+                <MudGrid Spacing="1">
+                    <!-- LINKE SPALTE: Identifikation & Lokation -->
+                    <MudItem xs="12" lg="6">
+                        <div class="pdq-section-header">Stammdaten</div>
+                        <div class="pdq-grid"><div class="pdq-label">Asset-Tag</div><div class="pdq-value">@(_asset.AssetTag ?? "---")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Seriennummer (S/N)</div><div class="pdq-value">@(_asset.SerialNumber ?? "---")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Kategorie</div><div class="pdq-value">@(_asset.AssetType?.Name ?? "---")</div></div>
+
+                        <div class="pdq-section-header mt-4">Lokations-Hierarchie (Das Wo)</div>
+                        <div class="pdq-grid"><div class="pdq-label">Land / Region</div><div class="pdq-value">@GetVal("Location", "Country")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Bundesland</div><div class="pdq-value">@GetVal("Location", "State")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Gemeinde / Stadt</div><div class="pdq-value">@GetVal("Location", "City")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Gebäude / Bauteil</div><div class="pdq-value">@GetVal("Location", "Building")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Etage / Stockwerk</div><div class="pdq-value">@GetVal("Location", "Floor")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Raum</div><div class="pdq-value">@GetVal("Location", "Room")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Stellplatz / Rack</div><div class="pdq-value">@GetVal("Location", "Rack")</div></div>
+                    </MudItem>
+
+                    <!-- RECHTE SPALTE: Organisation, Partner & Spezifika -->
+                    <MudItem xs="12" lg="6">
+                        <div class="pdq-section-header">Organisation & Rollen (Das Wer)</div>
+                        <div class="pdq-grid"><div class="pdq-label">Zugeordneter Nutzer (Person)</div><div class="pdq-value">@GetVal("Organization", "User")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Vorgesetzter / Standortleiter</div><div class="pdq-value">@GetVal("Organization", "Manager")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">C-Level Sponsor</div><div class="pdq-value">@GetVal("Organization", "CLevel")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Zuständiges Team / Gruppe</div><div class="pdq-value">@GetVal("Organization", "Team")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Kostenstelle</div><div class="pdq-value">@GetVal("Organization", "CostCenter")</div></div>
+
+                        <div class="pdq-section-header mt-4">Externe Partner & Lieferanten</div>
+                        <div class="pdq-grid"><div class="pdq-label">Hersteller (Manufacturer)</div><div class="pdq-value">@(_asset.Manufacturer?.Name ?? "---")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Lieferant (Vendor)</div><div class="pdq-value">@GetVal("Partners", "Vendor")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Dienstleister (MSP)</div><div class="pdq-value">@GetVal("Partners", "MSP")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Wartungspartner</div><div class="pdq-value">@GetVal("Partners", "MaintenancePartner")</div></div>
+
+                        @if (IsCategory("Cloud")) {
+                            <div class="pdq-section-header mt-4">Cloud Kontext</div>
+                            <div class="pdq-grid"><div class="pdq-label">Provider</div><div class="pdq-value">@GetVal("Cloud", "Provider")</div></div>
+                            <div class="pdq-grid"><div class="pdq-label">Region</div><div class="pdq-value">@GetVal("Cloud", "Region")</div></div>
+                            <div class="pdq-grid"><div class="pdq-label">Instanz-Typ</div><div class="pdq-value">@GetVal("Cloud", "InstanceType")</div></div>
                         }
-                    </MudGrid>
-                }
-                else if (_activeTab == "Hardware")
-                {
-                    <MudText Typo="Typo.h6" Class="mb-4">Hardware Details</MudText>
-                    <MudGrid>
-                        @foreach (var property in GetJsonProperties("Hardware"))
-                        {
-                            <MudItem xs="12" sm="6" md="4">
-                                <MudTextField T="string" Label="@property.Key" Value="@property.Value" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </MudItem>
+                        @if (IsCategory("Datacenter")) {
+                            <div class="pdq-section-header mt-4">RZ-Infrastruktur</div>
+                            <div class="pdq-grid"><div class="pdq-label">Auslastung / Status</div><div class="pdq-value">@GetVal("Datacenter", "Load")</div></div>
+                            <div class="pdq-grid"><div class="pdq-label">Batterie-Zustand</div><div class="pdq-value">@GetVal("Datacenter", "BatteryStatus")</div></div>
                         }
-                    </MudGrid>
-                }
-                else if (_activeTab == "Applications")
-                {
-                    <MudText Typo="Typo.h6" Class="mb-4">Installierte Software</MudText>
-                    <MudDataGrid T="JsonElement" Items="@GetJsonArray("Applications")" Dense="true" Hover="true">
-                        <Columns>
-                            <PropertyColumn Property="@(x => GetJsonValue(x, "Name"))" Title="Name" />
-                            <PropertyColumn Property="@(x => GetJsonValue(x, "Version"))" Title="Version" />
-                            <PropertyColumn Property="@(x => GetJsonValue(x, "Publisher"))" Title="Publisher" />
-                        </Columns>
-                    </MudDataGrid>
-                }
-                else if (_activeTab == "Network")
-                {
-                    <MudText Typo="Typo.h6" Class="mb-4">Netzwerk-Schnittstellen</MudText>
-                    <MudDataGrid T="IpAddress" Items="@_asset.NetworkInterfaces" Dense="true" Hover="true">
-                        <Columns>
-                            <PropertyColumn Property="x => x.Subnet != null ? x.Subnet.Name : string.Empty" Title="Subnetz" />
-                            <PropertyColumn Property="x => x.MacAddress" Title="MAC Adresse" />
-                            <PropertyColumn Property="x => x.Address" Title="IP Adresse" />
-                            <TemplateColumn Title="Aktionen">
-                                <CellTemplate>
-                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.WifiTethering"
-                                               OnClick="@(() => PingDeviceAsync(context.Item.Address))">Ping</MudButton>
-                                </CellTemplate>
-                            </TemplateColumn>
-                        </Columns>
-                    </MudDataGrid>
-                }
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (_activeTab == "Hardware") {
+                <MudGrid Spacing="1">
+                    <MudItem xs="12" lg="6">
+                        <div class="pdq-section-header">Physische Konfiguration</div>
+                        <div class="pdq-grid"><div class="pdq-label">Modell</div><div class="pdq-value">@GetVal("System", "Model")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Chassis</div><div class="pdq-value">@GetVal("System", "Chassis")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Prozessor</div><div class="pdq-value">@GetVal("Hardware", "CPU")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Arbeitsspeicher</div><div class="pdq-value">@GetVal("Hardware", "RAM")</div></div>
+                    </MudItem>
+                    @if (IsCategory("Datacenter") || IsCategory("Storage")) {
+                        <MudItem xs="12" lg="6">
+                            <div class="pdq-section-header">Erweiterte Technik</div>
+                            <div class="pdq-grid"><div class="pdq-label">Kapazität</div><div class="pdq-value">@GetVal("Storage", "Capacity")</div></div>
+                            <div class="pdq-grid"><div class="pdq-label">Protokolle</div><div class="pdq-value">@GetVal("Storage", "Protocol")</div></div>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else if (_activeTab == "Software") {
+                <div class="pdq-section-header">Netzwerk-Interfaces (IPv4/v6)</div>
+                <MudDataGrid T="IpAddress" Items="@_asset.NetworkInterfaces" Dense="true" Bordered="true" Elevation="0" Class="mb-4">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Address" Title="IP Adresse" />
+                        <PropertyColumn Property="x => x.MacAddress" Title="MAC" />
+                        <PropertyColumn Property="@(x => x.Subnet != null ? x.Subnet.Name : "N/A")" Title="Netz / VLAN" />
+                        <PropertyColumn Property="x => x.Description" Title="Interface-Name" />
+                    </Columns>
+                </MudDataGrid>
+            }
+            else {
+                <div class="pa-10 d-flex flex-column align-center opacity-40">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Large" Class="mb-4" />
+                    <MudText Typo="Typo.h6">Keine Einträge für '@_activeTab' vorhanden.</MudText>
+                </div>
+            }
+        </div>
+    </div>
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
     private Asset? _asset;
-    private JsonElement _dynamicData;
     private string _activeTab = "General";
+    private bool _isLoading = true;
     private bool _isEditMode = false;
 
-    private Dictionary<string, List<string>>? _lifecycleConfig;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadLifecycleConfiguration();
-        await LoadAssetData();
+    protected override async Task OnInitializedAsync() {
+        try { _asset = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}"); }
+        catch (Exception ex) { Snackbar.Add($"Fehler beim Laden: {ex.Message}", Severity.Error); }
+        finally { _isLoading = false; }
     }
 
-    private async Task LoadLifecycleConfiguration()
-    {
-        try
-        {
-            var config = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/asset-lifecycle");
-            if (config != null) _lifecycleConfig = config;
-        }
-        catch
-        {
-            _lifecycleConfig = new() {
-                { "1. Planung & Design", new() { "Bedarf gemeldet", "Genehmigt", "Geplant", "In Bestellung" } },
-                { "2. Beschaffung & Vorbereitung", new() { "Erhalten", "Lagernd", "In Vorbereitung", "In Prüfung / QS" } },
-                { "3. Implementierung", new() { "In Installation", "Reserviert", "In Rollout" } },
-                { "4. Betriebsphase", new() { "Produktiv", "In Wartung", "Gestört", "In Reparatur", "Nicht Verfügbar", "Leihgabe" } },
-                { "5. Außerbetriebnahme", new() { "Abkündigungsphase", "In Außerbetriebnahme", "Ausgemustert", "Archiviert", "Entsorgt", "Verkauft", "Verloren / Gestohlen" } }
-            };
-        }
+    private string GetVal(string section, string prop) {
+        if (string.IsNullOrEmpty(_asset?.DynamicDataJson)) return "---";
+        try {
+            using var doc = JsonDocument.Parse(_asset.DynamicDataJson);
+            return doc.RootElement.TryGetProperty(section, out var s) && s.TryGetProperty(prop, out var p) ? p.ToString() : "---";
+        } catch { return "---"; }
     }
 
-    private async Task LoadAssetData()
-    {
-        try
-        {
-            _asset = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}");
-            if (_asset != null && !string.IsNullOrWhiteSpace(_asset.DynamicDataJson))
-            {
-                using var doc = JsonDocument.Parse(_asset.DynamicDataJson);
-                _dynamicData = doc.RootElement.Clone();
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Fehler beim Laden: {ex.Message}", Severity.Error);
-        }
+    private bool IsCategory(string cat) {
+        var name = _asset?.AssetType?.Name;
+        if (string.IsNullOrEmpty(name)) return false;
+
+        return cat switch {
+            "Hardware" => name is "Rack-Server" or "Laptop" or "Mainframe" or "Blade-Center" or "Desktop" or "Workstation" or "Tablet" or "Smartphone" or "Backup-Appliance" or "Hardware-Appliance",
+            "Storage" => name is "SAN-Storage" or "NAS-System" or "NVMe-Array" or "Tape-Library",
+            "Network" => name is "Core-Switch" or "Access-Switch" or "Firewall" or "Router" or "Load-Balancer" or "VPN-Gateway" or "Access-Point" or "IDS-IPS-System" or "WLAN-Controller" or "WAN-Leitung" or "Internet-Breakout" or "SFP-Modul",
+            "Cloud" => name is "Cloud-Instanz" or "S3-Bucket" or "VM-Cluster" or "Kubernetes-Cluster" or "Kubernetes-Namespace" or "Entra-ID-Tenant" or "Azure-VM" or "AWS-EC2" or "Cloud-VNET" or "Docker-Host" or "K8s-Node",
+            "Datacenter" => name is "USV-Anlage" or "Klimagerät" or "PDU" or "Rack" or "Stellplatz",
+            "Software" => name is "Betriebssystem" or "Datenbank-Instanz" or "MS-SQL-Server" or "PostgreSQL-DB" or "Oracle-DB" or "SAP-HANA" or "Active-Directory-Domain" or "DNS-DHCP-Server" or "PKI-Dienst" or "Linux-Distribution" or "Client-OS",
+            "Service" => name is "Business-Service" or "IT-Service" or "ERP-System" or "CRM-System" or "Exchange-Server" or "SharePoint" or "HR-Software" or "Buchhaltungssystem" or "Teams" or "Zoom" or "Slack" or "Webserver" or "Message-Broker",
+            "License" => name is "Software-Lizenz" or "SSL-Zertifikat" or "Wartungsvertrag" or "Software-Lizenzvertrag",
+            "Geo" => name is "Land" or "Bundesland" or "Gemeinde" or "Stadt" or "Ortsteil" or "Adresse" or "Gebäude" or "Etage" or "Stockwerk" or "Raum",
+            "Org" => name is "Person" or "Kontakt" or "Vorgesetzter" or "Dienststellenleitung" or "Standortleiter" or "C-Level" or "Gruppe" or "Team" or "Kostenstelle",
+            "Partner" => name is "Lieferant" or "Vendor" or "Dienstleister" or "MSP" or "Wartungspartner" or "Hersteller",
+            _ => false
+        };
     }
 
-    private Color GetStatusColor(string status)
-    {
-        if (string.IsNullOrEmpty(status)) return Color.Default;
-        if (status == "Produktiv") return Color.Success;
-        if (status == "Gestört" || status == "Verloren / Gestohlen" || status == "In Reparatur") return Color.Error;
-        if (status.Contains("In") || status.Contains("phase") || status == "Reserviert") return Color.Warning;
-        if (status == "Lagernd" || status == "Geplant" || status == "Erhalten") return Color.Info;
-        return Color.Default;
-    }
+    private string GetIcon(string? type) => type switch {
+        // 1. Hardware & Physische Infrastruktur
+        "Laptop" => Icons.Material.Filled.Laptop,
+        "Desktop" or "Client-OS" => Icons.Material.Filled.DesktopWindows,
+        "Workstation" => Icons.Material.Filled.Computer,
+        "Smartphone" => Icons.Material.Filled.Smartphone,
+        "Tablet" => Icons.Material.Filled.TabletAndroid,
+        "Rack-Server" => Icons.Material.Filled.Storage,
+        "Blade-Center" => Icons.Material.Filled.ViewQuilt,
+        "Mainframe" => Icons.Material.Filled.DeveloperBoard,
+        "Backup-Appliance" or "Hardware-Appliance" => Icons.Material.Filled.SettingsBackupRestore,
+        "Rack" or "Stellplatz" => Icons.Material.Filled.ViewArray,
+        "PDU" => Icons.Material.Filled.Power,
+        "USV-Anlage" => Icons.Material.Filled.BatteryChargingFull,
+        "Klimagerät" => Icons.Material.Filled.AcUnit,
+        "SAN-Storage" or "NVMe-Array" => Icons.Material.Filled.Dns,
+        "NAS-System" => Icons.Material.Filled.FolderShared,
+        "Tape-Library" => Icons.Material.Filled.Save,
+        "Netzwerkdrucker" or "Multifunktionsgerät" => Icons.Material.Filled.Print,
+        "Dockingstation" => Icons.Material.Filled.SettingsInputHdmi,
+        "Monitor" => Icons.Material.Filled.Monitor,
 
-    private async Task SaveChanges()
-    {
-        try
-        {
-            var response = await Http.PutAsJsonAsync($"api/assets/{Id}", _asset);
-            if (response.IsSuccessStatusCode)
-            {
-                Snackbar.Add("Änderungen gespeichert!", Severity.Success);
-                _isEditMode = false;
-            }
-            else
-            {
-                Snackbar.Add("Fehler beim Speichern.", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"API-Fehler: {ex.Message}", Severity.Error);
-        }
-    }
-    
-    private async Task CancelEdit() { _isEditMode = false; await LoadAssetData(); }
+        // 2. Netzwerk-Infrastruktur
+        "Core-Switch" or "Access-Switch" => Icons.Material.Filled.SettingsInputComponent,
+        "Router" => Icons.Material.Filled.Router,
+        "WLAN-Controller" or "Access-Point" => Icons.Material.Filled.Wifi,
+        "Firewall" or "IDS-IPS-System" or "IDS/IPS-System" => Icons.Material.Filled.Security,
+        "Load-Balancer" or "Load Balancer" => Icons.Material.Filled.Balance,
+        "VPN-Gateway" => Icons.Material.Filled.VpnLock,
+        "WAN-Leitung" or "Internet-Breakout" => Icons.Material.Filled.Language,
+        "SFP-Modul" => Icons.Material.Filled.SettingsEthernet,
 
-    private async Task PingDeviceAsync(string ip)
-    {
-        if (string.IsNullOrWhiteSpace(ip)) return;
-        Snackbar.Add($"Ping an {ip}...", Severity.Info);
-        try
-        {
-            using var ping = new Ping();
-            var reply = await ping.SendPingAsync(ip, 2000);
-            if (reply.Status == IPStatus.Success) Snackbar.Add($"Erfolg! {reply.RoundtripTime}ms", Severity.Success);
-            else Snackbar.Add($"Fehler: {reply.Status}", Severity.Error);
-        }
-        catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
-    }
+        // 3. Virtualisierung & Cloud
+        "Hypervisor-Host" or "ESXi" or "Hyper-V" => Icons.Material.Filled.Memory,
+        "VM-Cluster" or "Kubernetes-Cluster" or "Cluster-Konfiguration" => Icons.Material.Filled.Hub,
+        "Resource-Pool" or "K8s-Namespace" or "Namespace" => Icons.Material.Filled.Layers,
+        "Cloud-Instanz" or "AWS EC2" or "Azure VM" => Icons.Material.Filled.Cloud,
+        "S3-Bucket" => Icons.Material.Filled.FolderZip,
+        "Entra-ID-Tenant" or "Azure AD" => Icons.Material.Filled.Badge,
+        "Cloud-VNET" => Icons.Material.Filled.FilterTiltShift,
+        "K8s-Node" or "Docker-Host" => Icons.Material.Filled.AppRegistration,
 
-    private string GetJsonValue(JsonElement el, string propName) =>
-        el.ValueKind == JsonValueKind.Object && el.TryGetProperty(propName, out var p) ? p.ToString() : string.Empty;
+        // 4. Software & Betriebssysteme
+        "Betriebssystem" or "Linux-Distribution" or "Windows Server" => Icons.Material.Filled.Settings,
+        "Active-Directory-Domain" or "AD-OU" => Icons.Material.Filled.AccountTree,
+        "DNS-DHCP-Server" => Icons.Material.Filled.Label,
+        "PKI-Dienst" or "Zertifikatsdienst" => Icons.Material.Filled.Key,
+        "MS-SQL-Server" or "Oracle-DB" or "PostgreSQL-DB" or "SAP-HANA" or "Datenbank-Instanz" or "MySQL" or "MongoDB" => Icons.Material.Filled.Dataset,
 
-    private Dictionary<string, string> GetJsonProperties(string section)
-    {
-        var result = new Dictionary<string, string>();
-        if (_dynamicData.ValueKind == JsonValueKind.Object && _dynamicData.TryGetProperty(section, out var sEl))
-            foreach (var p in sEl.EnumerateObject()) result[p.Name] = p.Value.ToString();
-        return result;
-    }
+        // 5. Applikationen & Enterprise
+        "Exchange-Server" or "E-Mail-Dienst" => Icons.Material.Filled.Email,
+        "SharePoint" => Icons.Material.Filled.DynamicFeed,
+        "ERP-System" or "CRM-System" or "HR-Software" or "Buchhaltungssystem" => Icons.Material.Filled.Business,
+        "Webserver" or "IIS" or "Apache" or "Nginx" => Icons.Material.Filled.Http,
+        "Message-Broker" or "Tomcat" or "JBoss" => Icons.Material.Filled.MoveToInbox,
+        "EDR-Software" or "Endpoint-Protection" => Icons.Material.Filled.Shield,
+        "Backup-Software" => Icons.Material.Filled.Backup,
+        "Microsoft Teams" or "Zoom" or "Slack" => Icons.Material.Filled.Forum,
 
-    private List<JsonElement> GetJsonArray(string section)
-    {
-        var result = new List<JsonElement>();
-        if (_dynamicData.ValueKind == JsonValueKind.Object && _dynamicData.TryGetProperty(section, out var sEl) && sEl.ValueKind == JsonValueKind.Array)
-            foreach (var i in sEl.EnumerateArray()) result.Add(i);
-        return result;
-    }
+        // 6. IT-Services & Lizenzen
+        "IT-Service" or "Business-Service" or "Homeoffice-Zugang" => Icons.Material.Filled.AutoAwesome,
+        "Software-Lizenz" or "Software-Lizenzvertrag" => Icons.Material.Filled.ConfirmationNumber,
+        "Wartungsvertrag" => Icons.Material.Filled.Assignment,
+        "SSL-Zertifikat" => Icons.Material.Filled.Verified,
+
+        // 7. Lokations-Hierarchie (Das Wo)
+        "Land" or "Bundesland" => Icons.Material.Filled.Public,
+        "Gemeinde" or "Stadt" or "Ortsteil" => Icons.Material.Filled.LocationCity,
+        "Gebäude" or "Adresse" => Icons.Material.Filled.HomeWork,
+        "Etage" or "Stockwerk" => Icons.Material.Filled.Stairs,
+        "Raum" => Icons.Material.Filled.MeetingRoom,
+
+        // 8. Personen & Rollen (Das Wer)
+        "Person" or "Kontakt" => Icons.Material.Filled.Person,
+        "Vorgesetzter" or "Dienststellenleitung" or "Standortleiter" => Icons.Material.Filled.ManageAccounts,
+        "C-Level" => Icons.Material.Filled.Stars,
+
+        // 9. Organisation & Partner
+        "Gruppe" or "Team" => Icons.Material.Filled.Groups,
+        "Kostenstelle" => Icons.Material.Filled.AccountBalance,
+        "Lieferant" or "Vendor" or "Dienstleister" or "MSP" or "Wartungspartner" or "Hersteller" => Icons.Material.Filled.Handshake,
+
+        _ => Icons.Material.Filled.Computer
+    };
 }

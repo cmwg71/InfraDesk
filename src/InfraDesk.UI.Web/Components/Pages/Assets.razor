@@ -6,63 +6,61 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 
-<PageTitle>InfraDesk - Asset-CMDB</PageTitle>
+<PageTitle>Asset-CMDB - Gesamtkatalog</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudText Typo="Typo.h4">Asset-CMDB</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h4" Class="font-weight-bold">Asset-CMDB</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Zentrale Übersicht aller CIs, Standorte, Personen und Verträge.</MudText>
+    </div>
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Asset</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Large" OnClick="@(() => Nav.NavigateTo("/assets/create"))" Style="border-radius: 8px;">
+        Neues Objekt anlegen
+    </MudButton>
 </MudStack>
 
 @if (_assets == null)
 {
-    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    <div class="d-flex justify-center align-center" style="height: 60vh;">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
 }
 else
 {
-    <MudDataGrid T="Asset" Items="@_assets" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickFilter" Hideable="true" Dense="true">
+    <MudDataGrid T="Asset" Items="@_assets" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickFilter" Dense="true" Elevation="2" Style="border-radius: 12px; overflow: hidden;">
         <ToolBarContent>
+            <MudText Typo="Typo.h6" Class="font-weight-bold">Gesamtkatalog</MudText>
             <MudSpacer />
-            <MudTextField @bind-Value="_searchString" Placeholder="Suchen (Name, IP, MAC, Inventar-Nr.)..." Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
+            <MudTextField @bind-Value="_searchString" Placeholder="Suchen (Name, Tag, Kategorie)..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Immediate="true" Class="mt-0" Style="width: 350px;"></MudTextField>
         </ToolBarContent>
         <Columns>
-            <TemplateColumn Title="OS" Sortable="false" Filterable="false" HeaderStyle="width: 60px;">
+            <TemplateColumn Title="Typ" HeaderStyle="width: 60px;" Sortable="false" Filterable="false">
                 <CellTemplate>
-                    @{
-                        var os = GetDynamicValue(context.Item.DynamicDataJson, "General", "OS");
-                        string icon = Icons.Material.Filled.DesktopWindows;
-                        if (os.Contains("Ubuntu") || os.Contains("Linux")) icon = Icons.Custom.Brands.Linux;
-                        else if (os.Contains("iOS") || os.Contains("Mac")) icon = Icons.Custom.Brands.Apple;
-                        else if (context.Item.AssetType?.Name == "Switch") icon = Icons.Material.Filled.Router;
-                        else if (context.Item.AssetType?.Name == "Printer") icon = Icons.Material.Filled.Print;
-                    }
-                    <MudTooltip Text="@(string.IsNullOrWhiteSpace(os) ? "Unbekannt" : os)">
-                        <MudIcon Icon="@icon" Size="Size.Small" Color="Color.Default" />
-                    </MudTooltip>
+                    <MudIcon Icon="@GetIconForType(context.Item.AssetType?.Name)" Size="Size.Medium" Color="Color.Primary" />
                 </CellTemplate>
             </TemplateColumn>
             
-            <PropertyColumn Property="x => x.Name" Title="Computername" />
+            <PropertyColumn Property="x => x.Name" Title="Bezeichnung" />
+            <PropertyColumn Property="x => x.AssetTag" Title="Asset-Tag" />
             
-            <TemplateColumn Title="IP Adresse" Sortable="false" Filterable="false">
+            <PropertyColumn Property="@(x => x.AssetType != null ? x.AssetType.Name : "---")" Title="Kategorie" />
+            <PropertyColumn Property="@(x => x.Manufacturer != null ? x.Manufacturer.Name : "---")" Title="Hersteller / Vendor" />
+            <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : "---")" Title="Standort / Hierarchie" />
+            
+            <TemplateColumn Title="Status" HeaderStyle="width: 150px;">
                 <CellTemplate>
-                    <MudText Typo="Typo.body2">@GetPrimaryIpAddress(context.Item)</MudText>
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.Item.LifecycleStatus == "Produktiv" ? Color.Success : Color.Default)"
+                             Variant="@(context.Item.LifecycleStatus == "Produktiv" ? Variant.Filled : Variant.Outlined)"
+                             Class="font-weight-bold">
+                        @context.Item.LifecycleStatus
+                    </MudChip>
                 </CellTemplate>
             </TemplateColumn>
-
-            <TemplateColumn Title="MAC Adresse" Sortable="false" Filterable="false" Hidden="true">
-                <CellTemplate>
-                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@GetPrimaryMacAddress(context.Item)</MudText>
-                </CellTemplate>
-            </TemplateColumn>
-            
-            <PropertyColumn Property="x => x.InventoryNumber" Title="Inventar-Nr." />
-            <PropertyColumn Property="x => x.AssetType != null ? x.AssetType.Name : string.Empty" Title="Typ" />
-            <PropertyColumn Property="x => x.Location != null ? x.Location.Name : string.Empty" Title="Standort" />
         </Columns>
         <PagerContent>
-            <MudDataGridPager T="Asset" RowsPerPageString="Einträge pro Seite:" PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+            <MudDataGridPager T="Asset" PageSizeOptions="new int[] { 15, 50, 100 }" />
         </PagerContent>
     </MudDataGrid>
 }
@@ -73,7 +71,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
+        try
+        {
+            _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
+        }
+        catch
+        {
+            // Fallback bei Verbindungsfehlern
+            _assets = new List<Asset>();
+        }
     }
 
     private void OnRowClicked(DataGridRowClickEventArgs<Asset> args)
@@ -81,48 +87,97 @@ else
         Nav.NavigateTo($"/assets/{args.Item.Id}");
     }
 
-    private string GetDynamicValue(string json, string section, string property)
+    // Identische, konsistente Icon-Logik passend zur Enterprise-CMDB und dem Wizard
+    private string GetIconForType(string? type) => type switch
     {
-        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty(section, out var sec) && sec.TryGetProperty(property, out var prop))
-                return prop.ToString() ?? string.Empty;
-        }
-        catch { }
-        return string.Empty;
-    }
+        // 1. Hardware & Physische Infrastruktur
+        "Laptop" => Icons.Material.Filled.Laptop,
+        "Desktop" or "Client-OS" => Icons.Material.Filled.DesktopWindows,
+        "Workstation" => Icons.Material.Filled.Computer,
+        "Smartphone" => Icons.Material.Filled.Smartphone,
+        "Tablet" => Icons.Material.Filled.TabletAndroid,
+        "Rack-Server" => Icons.Material.Filled.Storage,
+        "Blade-Center" => Icons.Material.Filled.ViewQuilt,
+        "Mainframe" => Icons.Material.Filled.DeveloperBoard,
+        "Backup-Appliance" or "Hardware-Appliance" => Icons.Material.Filled.SettingsBackupRestore,
+        "Rack" or "Stellplatz" => Icons.Material.Filled.ViewArray,
+        "PDU" => Icons.Material.Filled.Power,
+        "USV-Anlage" => Icons.Material.Filled.BatteryChargingFull,
+        "Klimagerät" => Icons.Material.Filled.AcUnit,
+        "SAN-Storage" or "NVMe-Array" => Icons.Material.Filled.Dns,
+        "NAS-System" => Icons.Material.Filled.FolderShared,
+        "Tape-Library" => Icons.Material.Filled.Save,
+        "Netzwerkdrucker" or "Multifunktionsgerät" => Icons.Material.Filled.Print,
+        "Dockingstation" => Icons.Material.Filled.SettingsInputHdmi,
+        "Monitor" => Icons.Material.Filled.Monitor,
 
-    private string GetPrimaryIpAddress(Asset asset)
-    {
-        if (asset.NetworkInterfaces != null && asset.NetworkInterfaces.Any())
-        {
-            var ips = asset.NetworkInterfaces.Where(n => !string.IsNullOrWhiteSpace(n.Address)).Select(n => n.Address);
-            if (ips.Any()) return string.Join(", ", ips);
-        }
-        var fallbackIp = GetDynamicValue(asset.DynamicDataJson, "General", "IPAddress");
-        return !string.IsNullOrWhiteSpace(fallbackIp) ? fallbackIp : "Keine IP";
-    }
+        // 2. Netzwerk-Infrastruktur
+        "Core-Switch" or "Access-Switch" => Icons.Material.Filled.SettingsInputComponent,
+        "Router" => Icons.Material.Filled.Router,
+        "WLAN-Controller" or "Access-Point" => Icons.Material.Filled.Wifi,
+        "Firewall" or "IDS-IPS-System" or "IDS/IPS-System" => Icons.Material.Filled.Security,
+        "Load-Balancer" or "Load Balancer" => Icons.Material.Filled.Balance,
+        "VPN-Gateway" => Icons.Material.Filled.VpnLock,
+        "WAN-Leitung" or "Internet-Breakout" => Icons.Material.Filled.Language,
+        "SFP-Modul" => Icons.Material.Filled.SettingsEthernet,
 
-    private string GetPrimaryMacAddress(Asset asset)
-    {
-        if (asset.NetworkInterfaces != null && asset.NetworkInterfaces.Any())
-        {
-            var macs = asset.NetworkInterfaces.Where(n => !string.IsNullOrWhiteSpace(n.MacAddress)).Select(n => n.MacAddress);
-            if (macs.Any()) return string.Join(", ", macs);
-        }
-        var fallbackMac = GetDynamicValue(asset.DynamicDataJson, "General", "MACAddress");
-        return !string.IsNullOrWhiteSpace(fallbackMac) ? fallbackMac : "-";
-    }
+        // 3. Virtualisierung & Cloud
+        "Hypervisor-Host" or "ESXi" or "Hyper-V" => Icons.Material.Filled.Memory,
+        "VM-Cluster" or "Kubernetes-Cluster" or "Cluster-Konfiguration" => Icons.Material.Filled.Hub,
+        "Resource-Pool" or "K8s-Namespace" or "Namespace" => Icons.Material.Filled.Layers,
+        "Cloud-Instanz" or "AWS EC2" or "Azure VM" => Icons.Material.Filled.Cloud,
+        "S3-Bucket" => Icons.Material.Filled.FolderZip,
+        "Entra-ID-Tenant" or "Azure AD" => Icons.Material.Filled.Badge,
+        "Cloud-VNET" => Icons.Material.Filled.FilterTiltShift,
+        "K8s-Node" or "Docker-Host" => Icons.Material.Filled.AppRegistration,
 
-    private Func<Asset, bool> QuickFilter => x =>
-    {
-        if (string.IsNullOrWhiteSpace(_searchString)) return true;
-        if (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
-        if (x.InventoryNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
-        if (GetPrimaryIpAddress(x).Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
-        if (GetPrimaryMacAddress(x).Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
+        // 4. Software & Betriebssysteme
+        "Betriebssystem" or "Linux-Distribution" or "Windows Server" => Icons.Material.Filled.Settings,
+        "Active-Directory-Domain" or "AD-OU" => Icons.Material.Filled.AccountTree,
+        "DNS-DHCP-Server" => Icons.Material.Filled.Label,
+        "PKI-Dienst" or "Zertifikatsdienst" => Icons.Material.Filled.Key,
+        "MS-SQL-Server" or "Oracle-DB" or "PostgreSQL-DB" or "SAP-HANA" or "Datenbank-Instanz" or "MySQL" or "MongoDB" => Icons.Material.Filled.Dataset,
+
+        // 5. Applikationen & Enterprise
+        "Exchange-Server" or "E-Mail-Dienst" => Icons.Material.Filled.Email,
+        "SharePoint" => Icons.Material.Filled.DynamicFeed,
+        "ERP-System" or "CRM-System" or "HR-Software" or "Buchhaltungssystem" => Icons.Material.Filled.Business,
+        "Webserver" or "IIS" or "Apache" or "Nginx" => Icons.Material.Filled.Http,
+        "Message-Broker" or "Tomcat" or "JBoss" => Icons.Material.Filled.MoveToInbox,
+        "EDR-Software" or "Endpoint-Protection" => Icons.Material.Filled.Shield,
+        "Backup-Software" => Icons.Material.Filled.Backup,
+        "Microsoft Teams" or "Zoom" or "Slack" => Icons.Material.Filled.Forum,
+
+        // 6. IT-Services & Lizenzen
+        "IT-Service" or "Business-Service" or "Homeoffice-Zugang" => Icons.Material.Filled.AutoAwesome,
+        "Software-Lizenz" or "Software-Lizenzvertrag" => Icons.Material.Filled.ConfirmationNumber,
+        "Wartungsvertrag" => Icons.Material.Filled.Assignment,
+        "SSL-Zertifikat" => Icons.Material.Filled.Verified,
+
+        // 7. Lokations-Hierarchie (Das Wo)
+        "Land" or "Bundesland" => Icons.Material.Filled.Public,
+        "Gemeinde" or "Stadt" or "Ortsteil" => Icons.Material.Filled.LocationCity,
+        "Gebäude" or "Adresse" => Icons.Material.Filled.HomeWork,
+        "Etage" or "Stockwerk" => Icons.Material.Filled.Stairs,
+        "Raum" => Icons.Material.Filled.MeetingRoom,
+
+        // 8. Personen & Rollen (Das Wer)
+        "Person" or "Kontakt" => Icons.Material.Filled.Person,
+        "Vorgesetzter" or "Dienststellenleitung" or "Standortleiter" => Icons.Material.Filled.ManageAccounts,
+        "C-Level" => Icons.Material.Filled.Stars,
+
+        // 9. Organisation & Partner
+        "Gruppe" or "Team" => Icons.Material.Filled.Groups,
+        "Kostenstelle" => Icons.Material.Filled.AccountBalance,
+        "Lieferant" or "Vendor" or "Dienstleister" or "MSP" or "Wartungspartner" or "Hersteller" => Icons.Material.Filled.Handshake,
+
+        _ => Icons.Material.Filled.Computer
     };
+
+    private Func<Asset, bool> QuickFilter => x => string.IsNullOrWhiteSpace(_searchString) ||
+        (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (x.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (x.AssetType?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (x.Manufacturer?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (x.Location?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false);
 }

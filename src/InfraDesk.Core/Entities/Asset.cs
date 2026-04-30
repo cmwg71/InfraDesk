@@ -15,11 +15,15 @@ public class Asset : BaseEntity
     }
 
     public Guid TenantId { get; set; }
+
     public required string Name { get; set; }
+
+    // NEU: Eindeutiger Asset-Tag für die physische Kennzeichnung (Barcode/QR)
+    public string? AssetTag { get; set; }
+
     public string? SerialNumber { get; set; }
     public string? InventoryNumber { get; set; }
 
-    // NEU: Lebenszyklus-Status (Standard: Produktiv)
     public string LifecycleStatus { get; set; } = "Produktiv";
 
     public Guid AssetTypeId { get; set; }

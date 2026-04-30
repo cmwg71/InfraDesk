@@ -131,7 +131,6 @@
             <div class="d-flex justify-center py-10">
                 <MudPaper Class="pa-16 d-flex flex-column align-center" Elevation="4" Outlined="true" Style="max-width: 900px; width: 100%; border-radius: 32px; background-color: var(--mud-palette-surface);">
                     
-                    @* Professionelle Logo-Platzierung *@
                     <div class="mb-12 d-flex justify-center">
                         <img src="InfraDesk_Ico.png" alt="InfraDesk Logo" style="height: 160px; object-fit: contain;" />
                     </div>
@@ -234,7 +233,6 @@
     private Dictionary<string, string> _newStatusInputs = new();
     private Dictionary<string, string> _phaseRenames = new();
 
-    // --- VERSIONIERUNG & UPDATE LOGIK ---
     private string _currentVersion = "2026.04.30.045";
     private string _gitHubToken = "";
     private bool _isCheckingUpdate = false;
@@ -281,7 +279,6 @@
         _isCheckingUpdate = false;
     }
 
-    // --- THEME LOGIK ---
     private void NotifyManualChange() => ThemeService.UpdateConfig(_themeConfig);
 
     private void ApplyPreset(string name)
