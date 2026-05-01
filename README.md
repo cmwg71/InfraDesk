@@ -40,6 +40,7 @@ Live-Theme-Engine: Sofortige Anwendung von Farb- und Typografie-Änderungen im g
 
 ## 🏗️ Architektur (Clean Architecture)
 
+```text
 InfraDesk folgt strikt dem Schichtenmodell, um Wartbarkeit und Testbarkeit zu garantieren:
  └── 
     ├── InfraDesk.Core: Domänen-Entitäten (Asset, Ticket, IpAddress) und Kernlogik.
@@ -53,6 +54,7 @@ InfraDesk folgt strikt dem Schichtenmodell, um Wartbarkeit und Testbarkeit zu ga
     ├── InfraDesk.API: Zentrale REST-Schnittstelle für den Discovery-Worker und externe Integrationen.
     |
     └── InfraDesk.Worker: Hintergrunddienst zur agentlosen Erfassung (WMI, DNS, Ping).
+```text
 
 ### 🛠️ Technologiestack
 
