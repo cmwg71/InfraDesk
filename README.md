@@ -41,18 +41,18 @@ Live-Theme-Engine: Sofortige Anwendung von Farb- und Typografie-Änderungen im g
 ## 🏗️ Architektur (Clean Architecture)
 
 InfraDesk folgt strikt dem Schichtenmodell, um Wartbarkeit und Testbarkeit zu garantieren:
-
-InfraDesk.Core: Domänen-Entitäten (Asset, Ticket, IpAddress) und Kernlogik.
-
-InfraDesk.Application: Use Cases, Interfaces und Geschäftslogik.
-
-InfraDesk.Infrastructure: Datenzugriff via Entity Framework Core, PostgreSQL-Konfiguration und externe Services.
-
-InfraDesk.UI.Web: Das moderne Web-Frontend (Blazor Interactive Server) mit MudBlazor-Komponenten.
-
-InfraDesk.API: Zentrale REST-Schnittstelle für den Discovery-Worker und externe Integrationen.
-
-InfraDesk.Worker: Hintergrunddienst zur agentlosen Erfassung (WMI, DNS, Ping).
+ └── 
+    ├── InfraDesk.Core: Domänen-Entitäten (Asset, Ticket, IpAddress) und Kernlogik.
+    |
+    ├── InfraDesk.Application: Use Cases, Interfaces und Geschäftslogik.
+    |
+    ├── InfraDesk.Infrastructure: Datenzugriff via Entity Framework Core, PostgreSQL-Konfiguration und externe Services.
+    |
+    ├── InfraDesk.UI.Web: Das moderne Web-Frontend (Blazor Interactive Server) mit MudBlazor-Komponenten.
+    |
+    ├── InfraDesk.API: Zentrale REST-Schnittstelle für den Discovery-Worker und externe Integrationen.
+    |
+    └── InfraDesk.Worker: Hintergrunddienst zur agentlosen Erfassung (WMI, DNS, Ping).
 
 ### 🛠️ Technologiestack
 
