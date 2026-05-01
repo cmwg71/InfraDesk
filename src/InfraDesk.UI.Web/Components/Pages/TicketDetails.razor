@@ -6,6 +6,7 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using System.Security.Claims
+@using System.IO
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -17,9 +18,11 @@
 
 <PageTitle>InfraDesk - Ticket #@(_ticket?.TicketNumber)</PageTitle>
 
+@* NavigationLock warnt den User vor Datenverlust *@
 <NavigationLock ConfirmExternalNavigation="_hasUnsavedChanges" OnBeforeInternalNavigation="OnBeforeInternalNavigation" />
 
 <style>
+    /* PDQ Enterprise Style Layout */
     .pdq-container { background-color: #f4f4f4; height: calc(100vh - 120px); display: flex; flex-direction: row; overflow: hidden; }
     .pdq-main { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px; }
     .pdq-sidebar { width: 400px; border-left: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; padding-bottom: 80px; }
@@ -31,6 +34,7 @@
     .header-meta { display: flex; align-items: center; gap: 14px; font-weight: normal; text-transform: none; font-size: 0.75rem; color: #444; }
     .meta-item { display: flex; align-items: center; gap: 5px; }
 
+    /* Journal & Aktivitäten */
     .activity-card { border: 1px solid #ccc; border-radius: 4px; margin-bottom: 12px; background: #fff; transition: background-color 0.2s; }
     .activity-agent { margin-left: 48px; border-left: 4px solid var(--mud-palette-primary) !important; background-color: #fcfdff; }
     .activity-header { background-color: #f5f5f5; padding: 4px 12px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
@@ -45,6 +49,7 @@
 @if (_ticket == null) {
     <div class="d-flex justify-center align-center" style="height: 80vh;"><MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" /></div>
 } else {
+    <!-- TOOLBAR (MANUELLES SPEICHERN) -->
     <div class="pdq-toolbar">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="NavigateBack" Size="Size.Small" Class="mr-2" />
         <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
@@ -79,6 +84,7 @@
         </MudButtonGroup>
     </div>
 
+    <!-- HINWEIS-BANNER -->
     @if (_hasUnsavedChanges)
     {
         <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Square="true" Dense="true" Class="py-1" ContentAlignment="HorizontalAlignment.Center">
@@ -88,11 +94,13 @@
     }
 
     <div class="pdq-container">
+        <!-- HAUPTBEREICH (LINKS) -->
         <div class="pdq-main">
             
+            <!-- 1. STATUS & BASISDATEN -->
             <div class="section-box">
                 <div class="section-header-compact">
-                    Status
+                    Status & Dringlichkeit
                     <span style="color: @GetStatusHex(_ticket.Status); font-weight: 900;">@_ticket.Status.ToUpper()</span>
                 </div>
                 <div class="pa-4">
@@ -120,9 +128,10 @@
                 </div>
             </div>
 
+            <!-- 2. KONTAKT -->
             <div class="section-box">
                 <div class="section-header-compact">
-                    Kontakt
+                    Kontakt & Mandant
                     <div class="header-meta">
                         <span class="meta-item">@(_tenants.FirstOrDefault(t => t.Id == _ticket.TenantId)?.Name ?? "Lade Mandant...")</span>
                         <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" /> @(_ticket.Requester?.LastName), @(_ticket.Requester?.FirstName)</span>
@@ -131,11 +140,11 @@
                 <div class="pa-4">
                     <MudGrid Spacing="2" AlignItems="AlignItems.Center">
                         <MudItem xs="12" md="6">
-                            <MudSelect T="Guid?" Label="Kontakt" @bind-Value="_ticket.RequesterId" @bind-Value:after="OnRequesterChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                            <MudSelect T="Guid?" Label="Ticket-Ersteller (Kontakt)" @bind-Value="_ticket.RequesterId" @bind-Value:after="OnRequesterChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
                                 @foreach(var p in _availableSupporters) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
                             </MudSelect>
                             <div style="font-size: 0.7rem; color: var(--mud-palette-primary); margin-top: 4px;">
-                                Tel.: @(_ticket.Requester?.Department ?? "N/A") | Email: @(_ticket.Requester?.Email)
+                                Email: @(_ticket.Requester?.Email) | Abt.: @(_ticket.Requester?.Department)
                             </div>
                         </MudItem>
                         <MudItem xs="12" md="6">
@@ -147,9 +156,10 @@
                 </div>
             </div>
 
+            <!-- 3. BESCHREIBUNG -->
             <div class="section-box">
                 <div class="section-header-compact">
-                    Beschreibung
+                    Problembeschreibung
                     <div class="header-meta">
                         <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" /> @ThemeService.FormatDate(_ticket.CreatedAt)</span>
                         <span class="meta-item"><MudAvatar Size="Size.Small" Color="Color.Primary" Style="width:18px; height:18px; font-size: 0.6rem;">@(_ticket.Requester?.LastName?.Substring(0,1) ?? "U")</MudAvatar> @(_ticket.Requester?.LastName)</span>
@@ -157,7 +167,7 @@
                 </div>
                 <div class="pa-4">
                     @if (_ticket.CreatedViaEmail) {
-                        <div class="mail-notice-box"><MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Class="mr-3" /><span>Per Mail angelegt.</span></div>
+                        <div class="mail-notice-box"><MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Class="mr-3" /><span>Per E-Mail eingegangen.</span></div>
                     }
                     <div style="font-size: 0.85rem; line-height: 1.5; color: #333; overflow-wrap: break-word;">
                         @((MarkupString)(_ticket.Description ?? "Keine Beschreibung hinterlegt."))
@@ -165,19 +175,17 @@
                 </div>
             </div>
 
+            <!-- 4. ANTWORT-FELD (Mit Paste Support) -->
             <MudPaper Class="pa-4 mb-8" Elevation="0" Outlined="true" Style="background: #fdfdfd; border-style: dashed; border-color: #ccc;">
                 <MudText Typo="Typo.caption" Class="font-weight-bold mb-2 d-block" Color="Color.Primary">
-                    NEUE ANTWORT VERFASSEN <span style="font-weight:normal; color:#888;">(Bilder per Strg+V direkt einfügen)</span>
+                    NEUE ANTWORT ODER INTERNE NOTIZ <span style="font-weight:normal; color:#888;">(Screenshots direkt per Strg+V einfügen)</span>
                 </MudText>
                 
-                <!-- WRAPPER FÜR COPY&PASTE JS-INTEROP -->
                 <div id="ticket-comment-wrapper">
-                    <MudTextField T="string" @bind-Value="_newComment" Placeholder="Ihre Antwort oder interne Notiz..." Lines="4" Variant="Variant.Outlined" Margin="Margin.Dense" BackgroundColor="#fff" />
+                    <MudTextField T="string" @bind-Value="_newComment" Placeholder="Ihre Bearbeitungsschritte dokumentieren..." Lines="4" Variant="Variant.Outlined" Margin="Margin.Dense" BackgroundColor="#fff" />
                 </div>
                 
                 <div class="d-flex justify-end mt-2 align-center">
-                    
-                    <!-- NEU: FILE UPLOAD -->
                     <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadFiles" MaximumFileCount="10" Class="mr-auto mt-0">
                         <ActivatorContent>
                             <MudButton StartIcon="@Icons.Material.Filled.AttachFile" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default">Anhang hinzufügen</MudButton>
@@ -195,6 +203,7 @@
                 </div>
             </MudPaper>
 
+            <!-- 5. BEARBEITUNGSVERLAUF (Journal) -->
             <div class="d-flex align-center mb-3">
                 <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="mr-2" Color="Color.Secondary" />
                 <MudText Typo="Typo.body2" Class="font-weight-bold">Bearbeitungsverlauf (Journal)</MudText>
@@ -216,12 +225,12 @@
                                     <MudAvatar Size="Size.Small" Color="@(act.IsStaffAction ? Color.Primary : Color.Info)" Style="width:18px; height:18px; font-size: 0.6rem;">@(string.IsNullOrEmpty(act.AuthorName) ? "?" : act.AuthorName.Substring(0,1))</MudAvatar> 
                                     <strong>@act.AuthorName</strong>
                                 </span>
-                                <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" /> @act.ActivitySpentMinutes Min</span>
+                                @if (act.ActivitySpentMinutes > 0) { <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" /> @act.ActivitySpentMinutes Min</span> }
                                 
                                 @if (!isInternal) {
                                     <MudTooltip>
                                         <ChildContent><MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Color="Color.Success" /></ChildContent>
-                                        <TooltipContent><MudText Typo="Typo.caption">Empfänger: @(_ticket.Requester?.Email) @(string.Join(", ", _ticket.Watchers?.Select(w => w.Email) ?? Enumerable.Empty<string>()))</MudText></TooltipContent>
+                                        <TooltipContent><MudText Typo="Typo.caption">Empfänger informiert</MudText></TooltipContent>
                                     </MudTooltip>
                                 }
                             </div>
@@ -233,10 +242,11 @@
             }
         </div>
 
-        <!-- SIDEBAR (RECHTS) -->
+        <!-- SIDEBAR (RECHTS - 10 MODULE) -->
         <div class="pdq-sidebar">
             <MudExpansionPanels MultiExpansion="true" Elevation="0" Square="true">
                 
+                <!-- 1. KATEGORISIERUNG (ITIL) -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent>
                         <div class="d-flex align-center justify-space-between w-100 pr-4">
@@ -262,6 +272,31 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 2. ENTSCHEIDER / GENEHMIGUNG -->
+                <MudExpansionPanel IsExpanded="true">
+                    <TitleContent>
+                        <div class="d-flex align-center justify-space-between w-100 pr-4">
+                            <div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.FactCheck" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Genehmigung</span></div>
+                            <MudChip T="string" Size="Size.Small" Color="@GetApprovalColor(_ticket.ApprovalStatus)" Variant="Variant.Text" Class="font-weight-bold">@(_ticket.ApprovalStatus ?? "Ausstehend")</MudChip>
+                        </div>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Spacing="2">
+                            <MudSelect T="Guid?" Label="Verantwortlicher Entscheider" @bind-Value="_ticket.ApproverId" @bind-Value:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                                @foreach(var p in _availableSupporters) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                            </MudSelect>
+                            @if (_ticket.ApproverId.HasValue)
+                            {
+                                <div class="d-flex gap-2 mt-1">
+                                    <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => SetApprovalStatus("Genehmigt"))">Genehmigen</MudButton>
+                                    <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => SetApprovalStatus("Abgelehnt"))">Ablehnen</MudButton>
+                                </div>
+                            }
+                        </MudStack>
+                    </ChildContent>
+                </MudExpansionPanel>
+
+                <!-- 3. SCHLAGWORTE -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Tag" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Schlagworte</span></div></TitleContent>
                     <ChildContent>
@@ -269,26 +304,27 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 4. ESKALATION -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Eskalation</span></div><MudRating SelectedValue="@_ticket.EscalationLevel" ReadOnly="true" Size="Size.Small" /></div></TitleContent>
                     <ChildContent>
-                        <MudText Typo="Typo.caption">Eskalationsstufe</MudText>
                         <MudRating @bind-SelectedValue="_ticket.EscalationLevel" @bind-SelectedValue:after="OnFieldChanged" Size="Size.Small" />
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 5. MASTER- / SUB-TICKET LOGIK -->
                 <MudExpansionPanel IsExpanded="true">
-                    <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Master- / Sub-Tickets</span></div></div></TitleContent>
+                    <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Hierarchie (Master)</span></div></div></TitleContent>
                     <ChildContent>
                         <MudAutocomplete T="Ticket" Label="Ist Sub-Ticket von..." @bind-Value="SelectedMasterTicket" 
-                                         SearchFunc="SearchTickets" ToStringFunc="@(t => t == null ? null : $"#{t.TicketNumber} {t.Title}")" 
+                                         SearchFunc="SearchTickets" ToStringFunc="@(t => t == null ? "" : $"#{t.TicketNumber} {t.Title}")" 
                                          Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" 
                                          HelperText="Macht dieses Ticket zu einer Unteraufgabe." />
 
                         @if (_ticket.ChildTickets != null && _ticket.ChildTickets.Any()) {
-                            <MudText Typo="Typo.caption" Class="mt-4 mb-2 d-block font-weight-bold">Verknüpfte Sub-Tickets:</MudText>
+                            <MudText Typo="Typo.caption" Class="mt-3 mb-1 d-block font-weight-bold">Verknüpfte Sub-Tickets:</MudText>
                             @foreach(var child in _ticket.ChildTickets) {
-                                <div class="d-flex align-center pa-2 mb-1" style="background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                                <div class="d-flex align-center pa-1 mb-1" style="background: #fff; border: 1px solid #ddd; border-radius: 4px;">
                                     <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
                                     <MudLink Href="@($"/tickets/{child.Id}")" Style="font-size: 0.72rem; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">#@child.TicketNumber @child.Title</MudLink>
                                 </div>
@@ -297,21 +333,25 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 6. ZUSTÄNDIGKEIT -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Support" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Zuständigkeit</span></div></div></TitleContent>
                     <ChildContent>
-                        <MudSelect T="Guid?" Label="Bearbeiter" @bind-Value="_ticket.SupporterId" @bind-Value:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
-                            @foreach(var p in _availableSupporters) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
-                        </MudSelect>
+                        <MudStack Spacing="2">
+                            <MudSelect T="Guid?" Label="Bearbeiter (Agent)" @bind-Value="_ticket.SupporterId" @bind-Value:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                                @foreach(var p in _availableSupporters) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                            </MudSelect>
+                        </MudStack>
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 7. AUFWAND & ZEIT -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Aufwand & Zeit</span></div></div></TitleContent>
                     <ChildContent>
                         <MudGrid Spacing="1">
-                            <MudItem xs="6"><MudNumericField T="int" Label="Verbucht" @bind-Value="_ticket.SpentMinutes" OnBlur="OnFieldChanged" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="6"><MudNumericField T="int" Label="Erwartet" @bind-Value="_ticket.EstimatedMinutes" OnBlur="OnFieldChanged" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="6"><MudNumericField T="int" Label="Ist (Min)" @bind-Value="_ticket.SpentMinutes" OnBlur="OnFieldChanged" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="6"><MudNumericField T="int" Label="Soll (Min)" @bind-Value="_ticket.EstimatedMinutes" OnBlur="OnFieldChanged" Margin="Margin.Dense" /></MudItem>
                             <MudItem xs="12">
                                 <MudText Typo="Typo.caption" Class="@(_ticket.EstimatedMinutes - _ticket.SpentMinutes < 0 ? "text-danger" : "")">Saldo: @(_ticket.EstimatedMinutes - _ticket.SpentMinutes) Min.</MudText>
                             </MudItem>
@@ -320,24 +360,11 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 8. INTERESSIERTER KREIS -->
                 <MudExpansionPanel IsExpanded="true">
-                    <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Termine</span></div><div style="font-size: 0.6rem; text-align: right;"><div><MudIcon Icon="@Icons.Material.Filled.Input" Size="Size.Small" /> @ThemeService.FormatDate(_ticket.CreatedAt, "dd.MM.yyyy")</div><div><MudIcon Icon="@Icons.Material.Filled.Flag" Size="Size.Small" Color="Color.Error" /> @ThemeService.FormatDate(_ticket.DueAt, "dd.MM.yyyy")</div></div></div></TitleContent>
+                    <TitleContent><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Watcher (CC)</span></div></TitleContent>
                     <ChildContent>
-                        <MudStack Spacing="2">
-                            <MudDatePicker Label="Zurückgestellt bis" @bind-Date="_ticket.DeferredUntil" @bind-Date:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Clearable="true" />
-                            <MudDivider />
-                            <MudDatePicker Label="Wiedervorlage" @bind-Date="_ticket.ReminderDate" @bind-Date:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Color="Color.Secondary" />
-                            <MudTextField T="string" Label="Hinweis" @bind-Value="_ticket.ReminderNote" OnBlur="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                        </MudStack>
-                    </ChildContent>
-                </MudExpansionPanel>
-
-                <MudExpansionPanel><TitleContent><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Workflow</span></div></TitleContent></MudExpansionPanel>
-
-                <MudExpansionPanel IsExpanded="true">
-                    <TitleContent><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Interessierter Kreis</span></div></TitleContent>
-                    <ChildContent>
-                        <MudSelect T="Person" Label="Person hinzufügen" ValueChanged="AddWatcher" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                        <MudSelect T="Person" Label="Watcher hinzufügen" ValueChanged="AddWatcher" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
                             @foreach(var p in _availableSupporters) { <MudSelectItem Value="@p">@p.LastName</MudSelectItem> }
                         </MudSelect>
                         <MudList T="string" Dense="true">
@@ -353,6 +380,7 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 9. VERKNÜPFTE ASSETS -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center justify-space-between w-100 pr-4"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Verknüpfte Assets</span></div><span style="font-size: 0.65rem">@(_ticket.AssignedAssets?.Count ?? 0) Assets</span></div></TitleContent>
                     <ChildContent>
@@ -369,18 +397,18 @@
                             </div>
                         }
                         
-                        <MudAutocomplete T="Asset" Label="Asset suchen & anfügen..." ValueChanged="AddAsset" 
+                        <MudAutocomplete T="Asset" Label="CMDB-Suche..." ValueChanged="AddAsset" 
                                          SearchFunc="SearchAssets" ToStringFunc="@(a => a == null ? null : $"{a.Name} ({a.AssetTag})")" 
                                          Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" 
                                          ResetValueOnEmptyText="true" CoerceText="false" CoerceValue="false" />
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <!-- 10. KONTAKT ASSETS -->
                 <MudExpansionPanel IsExpanded="true">
                     <TitleContent><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.PersonPin" Size="Size.Small" Class="mr-2"/><span class="sidebar-panel-header">Assets des Kontakts</span></div></TitleContent>
                     <ChildContent>
                         @if (_requesterAssets != null && _requesterAssets.Any()) {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">Klicken zum Anfügen:</MudText>
                             <MudList T="string" Dense="true" Clickable="true">
                                 @foreach(var a in _requesterAssets) {
                                     bool isAlreadyLinked = _ticket.AssignedAssets?.Any(ta => ta.Id == a.Id) ?? false;
@@ -390,7 +418,7 @@
                                 }
                             </MudList>
                         } else {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Keine Hardware zugewiesen.</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Keine Hardware gefunden.</MudText>
                         }
                     </ChildContent>
                 </MudExpansionPanel>
@@ -421,29 +449,16 @@
     private bool _hasUnsavedChanges = false;
     private DateTime? _dueAt;
     
-    // JS Interop Reference
     private DotNetObjectReference<TicketDetails>? _objRef;
 
     private int RemainingMinutes => (_ticket?.EstimatedMinutes ?? 0) - (_ticket?.SpentMinutes ?? 0);
 
-    public Ticket? SelectedMasterTicket
-    {
+    public Ticket? SelectedMasterTicket {
         get => _ticket?.MasterTicketId.HasValue == true ? _allTickets.FirstOrDefault(t => t.Id == _ticket.MasterTicketId) : null;
-        set {
-            if (_ticket != null) {
-                if (_ticket.MasterTicketId != value?.Id) {
-                    _ticket.MasterTicketId = value?.Id;
-                    OnFieldChanged();
-                }
-            }
-        }
+        set { if (_ticket != null && _ticket.MasterTicketId != value?.Id) { _ticket.MasterTicketId = value?.Id; OnFieldChanged(); } }
     }
 
-    private static readonly JsonSerializerOptions _jsonOptions = new() 
-    { 
-        ReferenceHandler = ReferenceHandler.IgnoreCycles,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
+    private static readonly JsonSerializerOptions _jsonOptions = new() { ReferenceHandler = ReferenceHandler.IgnoreCycles, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
     protected override async Task OnInitializedAsync() {
         await LoadData();
@@ -470,163 +485,63 @@
                 try { _availableSupporters = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch { }
                 try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
                 try { _tenants = await Http.GetFromJsonAsync<List<Tenant>>("api/tenants") ?? new(); } catch { }
-                
                 await LoadRequesterAssets();
             }
         } catch (Exception ex) { Snackbar.Add($"Fehler beim Laden: {ex.Message}", Severity.Error); }
         finally { _isLoading = false; }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            var jsCode = @"
-                window.attachImagePasteListener = function(wrapperId, dotNetRef) {
-                    var wrapper = document.getElementById(wrapperId);
-                    if(!wrapper) return;
-                    
-                    var el = wrapper.querySelector('textarea') || wrapper.querySelector('input');
-                    if(el && !el.dataset.pasteAttached) {
-                        el.dataset.pasteAttached = 'true';
-                        
-                        el.addEventListener('paste', function(e) {
-                            var clipboardData = e.clipboardData || window.clipboardData;
-                            if (!clipboardData) return;
-                            
-                            var items = clipboardData.items;
-                            for (var i = 0; i < items.length; i++) {
-                                if (items[i].type.indexOf('image') !== -1) {
-                                    e.preventDefault(); 
-                                    
-                                    var blob = items[i].getAsFile();
-                                    var reader = new FileReader();
-                                    reader.onload = function(event) {
-                                        dotNetRef.invokeMethodAsync('HandleImagePasted', event.target.result);
-                                    };
-                                    reader.readAsDataURL(blob);
-                                    break;
-                                }
-                            }
-                        });
-                    }
-                };
-            ";
-            
-            await JSRuntime.InvokeVoidAsync("eval", jsCode);
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (firstRender) {
+            var js = "window.attachImagePasteListener = function(wrapperId, dotNetRef) { var wrapper = document.getElementById(wrapperId); if(!wrapper) return; var el = wrapper.querySelector('textarea') || wrapper.querySelector('input'); if(el && !el.dataset.pasteAttached) { el.dataset.pasteAttached = 'true'; el.addEventListener('paste', function(e) { var clipboardData = e.clipboardData || window.clipboardData; if (!clipboardData) return; var items = clipboardData.items; for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf('image') !== -1) { e.preventDefault(); var blob = items[i].getAsFile(); var reader = new FileReader(); reader.onload = function(event) { dotNetRef.invokeMethodAsync('HandleImagePasted', event.target.result); }; reader.readAsDataURL(blob); break; } } }); } };";
+            await JSRuntime.InvokeVoidAsync("eval", js);
             _objRef = DotNetObjectReference.Create(this);
         }
-
-        if (!_isLoading && _ticket != null)
-        {
-            await JSRuntime.InvokeVoidAsync("attachImagePasteListener", "ticket-comment-wrapper", _objRef);
-        }
+        if (!_isLoading && _ticket != null) await JSRuntime.InvokeVoidAsync("attachImagePasteListener", "ticket-comment-wrapper", _objRef);
     }
 
     [JSInvokable]
-    public void HandleImagePasted(string base64Image)
-    {
-        string imgTag = $"\n<br/><img src=\"{base64Image}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
-        _newComment += imgTag;
-        
-        Snackbar.Add("Bild erfolgreich aus der Zwischenablage eingefügt.", Severity.Success);
+    public void HandleImagePasted(string base64Image) {
+        _newComment += $"\n<br/><img src=\"{base64Image}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
+        Snackbar.Add("Bild aus Zwischenablage eingefügt.", Severity.Success);
         StateHasChanged();
     }
 
-    // NEU: Logik zum Verarbeiten hochgeladener Dateien
-    private async Task UploadFiles(IReadOnlyList<IBrowserFile> files)
-    {
-        foreach (var file in files)
-        {
-            try
-            {
-                // Max 10 MB pro Datei
-                var maxAllowedSize = 10 * 1024 * 1024; 
-                using var stream = file.OpenReadStream(maxAllowedSize);
+    private async Task UploadFiles(IReadOnlyList<IBrowserFile> files) {
+        foreach (var file in files) {
+            try {
+                using var stream = file.OpenReadStream(10 * 1024 * 1024);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms);
                 var base64 = Convert.ToBase64String(ms.ToArray());
-                var mimeType = file.ContentType;
-                
-                if (mimeType.StartsWith("image/"))
-                {
-                    _newComment += $"\n<br/><img src=\"data:{mimeType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
-                }
-                else
-                {
-                    // Erstellt einen eleganten Download-Button direkt im Text-Feld
-                    _newComment += $"\n<br/><a href=\"data:{mimeType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>\n";
-                }
-                
-                Snackbar.Add($"{file.Name} erfolgreich angehängt.", Severity.Success);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Fehler bei {file.Name}: {ex.Message}", Severity.Error);
-            }
+                if (file.ContentType.StartsWith("image/")) _newComment += $"\n<br/><img src=\"data:{file.ContentType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
+                else _newComment += $"\n<br/><a href=\"data:{file.ContentType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>\n";
+                Snackbar.Add($"{file.Name} angehängt.", Severity.Success);
+            } catch (Exception ex) { Snackbar.Add($"Fehler bei {file.Name}: {ex.Message}", Severity.Error); }
         }
         StateHasChanged();
     }
 
-    private async Task LoadRequesterAssets() {
-        if (_ticket?.RequesterId.HasValue == true && _allAssets.Any()) {
-            _requesterAssets = _allAssets.Where(a => a.OwnerId == _ticket.RequesterId).ToList();
-        }
+    private async Task SetApprovalStatus(string status) {
+        if (_ticket == null) return;
+        _ticket.ApprovalStatus = status;
+        _ticket.Activities.Add(new TicketActivity { Id = Guid.NewGuid(), TicketId = _ticket.Id, AuthorName = "System", Content = $"Genehmigungsentscheidung: <b>{status}</b>", Timestamp = DateTime.UtcNow, Type = "System", IsPublic = true });
+        await SaveTicketWithLogging(false);
     }
 
-    private void UpdateSnapshot() {
-        if (_ticket != null) {
-            var json = JsonSerializer.Serialize(_ticket, _jsonOptions);
-            _originalTicket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions);
-        }
-    }
-
+    private async Task LoadRequesterAssets() { if (_ticket?.RequesterId.HasValue == true && _allAssets.Any()) _requesterAssets = _allAssets.Where(a => a.OwnerId == _ticket.RequesterId).ToList(); }
+    private void UpdateSnapshot() { if (_ticket != null) { var json = JsonSerializer.Serialize(_ticket, _jsonOptions); _originalTicket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions); } }
     private void OnFieldChanged() => _hasUnsavedChanges = true;
-
-    private void DiscardChanges() {
-        if (_originalTicket != null) {
-            var json = JsonSerializer.Serialize(_originalTicket, _jsonOptions);
-            _ticket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions);
-            _dueAt = _ticket?.DueAt;
-            _hasUnsavedChanges = false;
-            Snackbar.Add("Änderungen verworfen.", Severity.Info);
-        }
-    }
-
-    private async Task OnBeforeInternalNavigation(LocationChangingContext context) {
-        if (_hasUnsavedChanges) {
-            bool? result = await DialogService.ShowMessageBoxAsync(
-                "Ungespeicherte Änderungen", 
-                "Nicht gespeicherte Daten gehen verloren. Seite wirklich verlassen?", 
-                yesText: "Verlassen",
-                cancelText: "Bleiben");
-
-            if (result == null || result == false) context.PreventNavigation();
-        }
-    }
-
-    private void NavigateBack() {
-        Nav.NavigateTo("/tickets");
-    }
+    private void DiscardChanges() { if (_originalTicket != null) { var json = JsonSerializer.Serialize(_originalTicket, _jsonOptions); _ticket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions); _dueAt = _ticket?.DueAt; _hasUnsavedChanges = false; Snackbar.Add("Änderungen verworfen.", Severity.Info); } }
+    private async Task OnBeforeInternalNavigation(LocationChangingContext context) { if (_hasUnsavedChanges) { bool? result = await DialogService.ShowMessageBoxAsync("Ungespeicherte Änderungen", "Nicht gespeicherte Daten gehen verloren. Seite wirklich verlassen?", yesText: "Verlassen", cancelText: "Bleiben"); if (result == null || result == false) context.PreventNavigation(); } }
+    private void NavigateBack() => Nav.NavigateTo("/tickets");
 
     private async Task AddCommentAndNotify() {
         if (string.IsNullOrWhiteSpace(_newComment)) return;
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userName = authState.User.Identity?.Name ?? "System Agent";
-
-        var act = new TicketActivity { 
-            Id = Guid.NewGuid(), TicketId = _ticket!.Id, AuthorName = userName, 
-            Content = _newComment, Timestamp = DateTime.UtcNow, IsPublic = _commentIsPublic,
-            IsStaffAction = true, Type = "Comment", ActivitySpentMinutes = _newCommentMinutes
-        };
-        
-        _ticket.SpentMinutes += _newCommentMinutes;
-        _ticket.Activities.Add(act);
-        
-        if (_commentIsPublic) Snackbar.Add($"E-Mail gesendet.", Severity.Info);
-        else Snackbar.Add("Interne Notiz gespeichert.", Severity.Warning);
-
-        _newComment = ""; _newCommentMinutes = 0;
+        var userName = authState.User.Identity?.Name ?? "Agent";
+        _ticket!.Activities.Add(new TicketActivity { Id = Guid.NewGuid(), TicketId = _ticket.Id, AuthorName = userName, Content = _newComment, Timestamp = DateTime.UtcNow, IsPublic = _commentIsPublic, IsStaffAction = true, Type = "Comment", ActivitySpentMinutes = _newCommentMinutes });
+        _ticket.SpentMinutes += _newCommentMinutes; _newComment = ""; _newCommentMinutes = 0;
         await SaveTicketWithLogging(isNewComment: true);
     }
 
@@ -634,113 +549,53 @@
         if (_ticket == null || _isSaving || _isLoading) return false;
         _isSaving = true;
         
+        // FIX: Variable newActivities statt newActs zur Vermeidung von CS0103 Fehlern
         var newActivities = new List<TicketActivity>();
-
         try {
             _ticket.DueAt = _dueAt;
-            
             if (_originalTicket != null && !isNewComment) {
-                if (_originalTicket.Status != _ticket.Status) newActivities.Add(CreateSysActivity($"Status: '{_originalTicket.Status}' -> '{_ticket.Status}'"));
-                if (_originalTicket.Priority != _ticket.Priority) newActivities.Add(CreateSysActivity($"Priorität: '{_originalTicket.Priority}' -> '{_ticket.Priority}'"));
-                if (_originalTicket.RequesterId != _ticket.RequesterId) newActivities.Add(CreateSysActivity("Kontakt aktualisiert."));
-                
-                // Logging Logik für die Kategorien
-                if (_originalTicket.Category1 != _ticket.Category1) newActivities.Add(CreateSysActivity($"Ticket-Typ: '{_ticket.Category1}'"));
-                if (_originalTicket.Category3 != _ticket.Category3) newActivities.Add(CreateSysActivity($"Subkategorie: '{_ticket.Category3}'"));
-                if (_originalTicket.Tags != _ticket.Tags) newActivities.Add(CreateSysActivity($"Schlagworte aktualisiert."));
-                if ((_originalTicket.AssignedAssets?.Count ?? 0) != (_ticket.AssignedAssets?.Count ?? 0)) newActivities.Add(CreateSysActivity($"Verknüpfte Assets aktualisiert."));
-                if (_originalTicket.MasterTicketId != _ticket.MasterTicketId) newActivities.Add(CreateSysActivity($"Master-Ticket Zuweisung geändert."));
+                if (_originalTicket.Status != _ticket.Status) newActivities.Add(CreateSysActivity($"Status-Update: <b>{_originalTicket.Status}</b> &rarr; <b>{_ticket.Status}</b>"));
+                if (_originalTicket.Priority != _ticket.Priority) newActivities.Add(CreateSysActivity($"Priorität geändert auf <b>{_ticket.Priority}</b>"));
+                if (_originalTicket.RequesterId != _ticket.RequesterId) newActivities.Add(CreateSysActivity("Ticket-Kontakt wurde aktualisiert."));
+                if (_originalTicket.SupporterId != _ticket.SupporterId) {
+                    var s = _availableSupporters.FirstOrDefault(x => x.Id == _ticket.SupporterId);
+                    newActivities.Add(CreateSysActivity($"Bearbeiter-Zuweisung: <b>{(s != null ? s.LastName : "Nicht zugewiesen")}</b>"));
+                }
+                if (_originalTicket.Category1 != _ticket.Category1) newActivities.Add(CreateSysActivity($"ITIL-Typ geändert: <b>{_ticket.Category1}</b>"));
+                if (_originalTicket.Category2 != _ticket.Category2) newActivities.Add(CreateSysActivity($"Asset-Kategorie: <b>{_ticket.Category2}</b>"));
+                if (_originalTicket.Category3 != _ticket.Category3) newActivities.Add(CreateSysActivity($"Sub-Kategorie: <b>{_ticket.Category3}</b>"));
+                if (_originalTicket.Tags != _ticket.Tags) newActivities.Add(CreateSysActivity($"Tags aktualisiert: <i>{(_ticket.Tags ?? "Keine")}</i>"));
+                if (_originalTicket.ApproverId != _ticket.ApproverId) {
+                    var a = _availableSupporters.FirstOrDefault(x => x.Id == _ticket.ApproverId);
+                    newActivities.Add(CreateSysActivity($"Entscheider zugewiesen: <b>{(a != null ? a.LastName : "Keiner")}</b>"));
+                }
+                if (_originalTicket.EscalationLevel != _ticket.EscalationLevel) newActivities.Add(CreateSysActivity($"Eskalation geändert auf <b>Level {_ticket.EscalationLevel}</b>"));
+                if (_originalTicket.MasterTicketId != _ticket.MasterTicketId) newActivities.Add(CreateSysActivity("Ticket-Hierarchie angepasst."));
+                if ((_originalTicket.AssignedAssets?.Count ?? 0) != (_ticket.AssignedAssets?.Count ?? 0)) newActivities.Add(CreateSysActivity($"Asset-Zuweisung geändert (Anzahl: {_ticket.AssignedAssets?.Count})."));
 
                 foreach(var act in newActivities) _ticket.Activities.Add(act);
             }
-
             var res = await Http.PutAsJsonAsync($"api/tickets/{_ticket.Id}", _ticket, _jsonOptions);
-            
-            if (res.IsSuccessStatusCode) { 
-                UpdateSnapshot(); 
-                _hasUnsavedChanges = false;
-                Snackbar.Add("Ticket gespeichert.", Severity.Success);
-                return true; 
-            } else {
-                var error = await res.Content.ReadAsStringAsync();
-                Snackbar.Add($"Fehler: {error}", Severity.Error);
+            if (res.IsSuccessStatusCode) { UpdateSnapshot(); _hasUnsavedChanges = false; Snackbar.Add("Gespeichert.", Severity.Success); return true; }
+            else { 
                 foreach(var act in newActivities) _ticket.Activities.Remove(act);
-                return false;
+                Snackbar.Add("API-Fehler beim Speichern.", Severity.Error); return false; 
             }
-        } catch (Exception ex) {
-            Snackbar.Add($"Netzwerkfehler: {ex.Message}", Severity.Error);
-            foreach(var act in newActivities) _ticket.Activities.Remove(act);
-            return false;
-        } finally { _isSaving = false; StateHasChanged(); }
+        } catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); return false; }
+        finally { _isSaving = false; StateHasChanged(); }
     }
 
-    private TicketActivity CreateSysActivity(string content) => new TicketActivity { 
-        Id = Guid.NewGuid(), TicketId = _ticket!.Id, AuthorName = "System", 
-        Content = content, Timestamp = DateTime.UtcNow, Type = "System", IsPublic = true 
-    };
-
+    private TicketActivity CreateSysActivity(string content) => new TicketActivity { Id = Guid.NewGuid(), TicketId = _ticket!.Id, AuthorName = "System", Content = content, Timestamp = DateTime.UtcNow, Type = "System", IsPublic = true };
+    private Task<IEnumerable<Ticket>> SearchTickets(string val, CancellationToken ct) => Task.FromResult(_allTickets.Where(t => t.Id != _ticket?.Id && (t.TicketNumber.ToString().Contains(val) || (t.Title != null && t.Title.Contains(val, StringComparison.OrdinalIgnoreCase)))).Take(10));
+    private Task<IEnumerable<Asset>> SearchAssets(string val, CancellationToken ct) => Task.FromResult(_allAssets.Where(a => (a.Name != null && a.Name.Contains(val, StringComparison.OrdinalIgnoreCase)) || (a.AssetTag != null && a.AssetTag.Contains(val, StringComparison.OrdinalIgnoreCase))).Take(10));
+    private void AddAsset(Asset? a) { if (a != null && !_ticket!.AssignedAssets.Any(x => x.Id == a.Id)) { _ticket.AssignedAssets.Add(a); OnFieldChanged(); } }
+    private void RemoveAsset(Asset a) { _ticket?.AssignedAssets.Remove(a); OnFieldChanged(); }
+    private void AddWatcher(Person p) { if (p != null && !_ticket!.Watchers.Any(w => w.Id == p.Id)) { _ticket.Watchers.Add(p); OnFieldChanged(); } }
+    private void RemoveWatcher(Person p) { _ticket?.Watchers.Remove(p); OnFieldChanged(); }
     private async Task OnRequesterChanged() { await LoadRequesterAssets(); OnFieldChanged(); }
-
-    private Task<IEnumerable<Ticket>> SearchTickets(string value, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(value)) return Task.FromResult(_allTickets.Where(t => t.Id != _ticket?.Id).Take(10));
-        return Task.FromResult(_allTickets.Where(t => t.Id != _ticket?.Id && 
-            (t.TicketNumber.ToString().Contains(value) || t.Title.Contains(value, StringComparison.OrdinalIgnoreCase))
-        ).Take(10));
-    }
-
-    private Task<IEnumerable<Asset>> SearchAssets(string value, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(value)) return Task.FromResult(_allAssets.Take(10));
-        return Task.FromResult(_allAssets.Where(a => 
-            (a.Name?.Contains(value, StringComparison.OrdinalIgnoreCase) == true) || 
-            (a.AssetTag?.Contains(value, StringComparison.OrdinalIgnoreCase) == true)
-        ).Take(10));
-    }
-
-    private void AddAsset(Asset? a) { 
-        if (a != null) {
-            _ticket!.AssignedAssets ??= new List<Asset>();
-            if (!_ticket.AssignedAssets.Any(x => x.Id == a.Id)) {
-                _ticket.AssignedAssets.Add(a);
-                OnFieldChanged();
-            }
-        }
-    }
-
-    private void RemoveAsset(Asset a) { _ticket?.AssignedAssets?.Remove(a); OnFieldChanged(); }
-
-    private void AddWatcher(Person p) { 
-        _ticket!.Watchers ??= new List<Person>(); 
-        if (!_ticket.Watchers.Any(w => w.Id == p.Id)) { 
-            _ticket.Watchers.Add(p); 
-            OnFieldChanged();
-        } 
-    }
-
-    private void RemoveWatcher(Person p) { 
-        _ticket?.Watchers?.Remove(p); 
-        OnFieldChanged(); 
-    }
-
-    private string GetStatusHex(string s) => (s ?? "").ToUpper() switch { "OFFEN" => "#2E7D32", "BEANTWORTET" => "#1976D2", "AKTIV" => "#C62828", _ => "#757575" };
-    
-    private string GetItilIcon(string? category) => category switch {
-        "Incident (Störung)" => Icons.Material.Filled.Bolt,
-        "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart,
-        "Change (Änderung)" => Icons.Material.Filled.Settings,
-        "Problem (Problem)" => Icons.Material.Filled.Search,
-        _ => Icons.Material.Filled.Label
-    };
-
-    private Color GetItilColor(string? category) => category switch {
-        "Incident (Störung)" => Color.Error,
-        "Service Request (Serviceanfrage)" => Color.Info,
-        "Change (Änderung)" => Color.Warning,
-        "Problem (Problem)" => Color.Dark,
-        _ => Color.Default
-    };
-
-    public async ValueTask DisposeAsync()
-    {
-        _objRef?.Dispose();
-    }
+    private string GetStatusHex(string s) => (s ?? "OFFEN").ToUpper() switch { "OFFEN" => "#2E7D32", "BEANTWORTET" => "#1976D2", "AKTIV" => "#C62828", _ => "#757575" };
+    private Color GetApprovalColor(string? s) => s switch { "Genehmigt" => Color.Success, "Abgelehnt" => Color.Error, _ => Color.Warning };
+    private string GetItilIcon(string? c) => c switch { "Incident (Störung)" => Icons.Material.Filled.Bolt, "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart, "Change (Änderung)" => Icons.Material.Filled.Settings, "Problem (Problem)" => Icons.Material.Filled.Search, _ => Icons.Material.Filled.Label };
+    private Color GetItilColor(string? c) => c switch { "Incident (Störung)" => Color.Error, "Service Request (Serviceanfrage)" => Color.Info, "Change (Änderung)" => Color.Warning, "Problem (Problem)" => Color.Dark, _ => Color.Default };
+    public async ValueTask DisposeAsync() { if (_objRef != null) _objRef.Dispose(); }
 }
