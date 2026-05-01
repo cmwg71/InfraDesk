@@ -8,7 +8,7 @@ InfraDesk ist eine modulare, webbasierte IT-Management-Plattform, die darauf spe
 
 Single Source of Truth: Alle Hardware-Assets und deren Abhängigkeiten an einem zentralen Ort.
 
-Dynamisches Datenmodell: Speicherung flexibler Attribute via PostgreSQL JSONB (ermöglicht PDQ-Inventory ähnliche Tiefe).
+Dynamisches Datenmodell: Speicherung flexibler Attribute via PostgreSQL JSONB.
 
 Lebenszyklus-Management: Vollständig konfigurierbare Phasen von "Planung & Design" bis "Außerbetriebnahme".
 
