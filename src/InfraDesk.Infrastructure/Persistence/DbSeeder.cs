@@ -1,5 +1,6 @@
 ﻿// Dateipfad: src/InfraDesk.Infrastructure/Persistence/DbSeeder.cs
 using InfraDesk.Core.Entities;
+using InfraDesk.Core.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -13,24 +14,47 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(ApplicationDbContext context)
     {
+        // Wenn bereits Daten da sind, abbrechen
         if (await context.Assets.AnyAsync()) return;
 
+        // --- 1. MANDANT (TENANT) ---
         var tenantId = Guid.NewGuid();
         var tenant = new Tenant { Id = tenantId, Name = "Grams IT Global Enterprise", Domain = "grams-it.com" };
         context.Tenants.Add(tenant);
 
-        // --- 1. STANDORTE (Physisch) ---
+        // --- 2. INITIALER SYSTEM-ADMINISTRATOR ---
+        // Zugangsdaten: admin@infradesk.local / Admin123!
+        if (!context.Persons.Any(p => p.Email == "admin@infradesk.local"))
+        {
+            var admin = new Person
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                FirstName = "System",
+                LastName = "Administrator",
+                Email = "admin@infradesk.local",
+                SystemRole = "Global Admin",
+                PasswordHash = SecurityHelper.HashPassword("Admin123!"),
+                AllowedTenantsJson = JsonSerializer.Serialize(new[] {
+                    new { Id = tenantId, Name = tenant.Name },
+                    new { Id = Guid.NewGuid(), Name = "Tochtergesellschaft A" }
+                })
+            };
+            context.Persons.Add(admin);
+        }
+
+        // --- 3. STANDORTE (Physisch) ---
         var locRZ = new Location { Id = Guid.NewGuid(), TenantId = tenantId, Name = "RZ-FRA-01 (Tier 4)", Address = "Hanauer Landstraße 300" };
         var locHQ = new Location { Id = Guid.NewGuid(), TenantId = tenantId, Name = "HQ Frankfurt", Address = "MainTower 1" };
         context.Locations.AddRange(locRZ, locHQ);
 
-        // --- 2. IPAM SUBNETZE ---
+        // --- 4. IPAM SUBNETZE ---
         var subMgmt = new Subnet { Id = Guid.NewGuid(), TenantId = tenantId, Name = "OOB-Management", NetworkAddress = "10.0.0.0", CidrMask = 24, Gateway = "10.0.0.1", VlanId = 10 };
         var subProd = new Subnet { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Prod-Server", NetworkAddress = "10.0.20.0", CidrMask = 24, Gateway = "10.0.20.1", VlanId = 20 };
         var subClient = new Subnet { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Client-WiFi", NetworkAddress = "10.0.100.0", CidrMask = 22, Gateway = "10.0.100.1", VlanId = 100 };
         context.Subnets.AddRange(subMgmt, subProd, subClient);
 
-        // --- 3. HERSTELLER PORTFOLIO ---
+        // --- 5. HERSTELLER PORTFOLIO ---
         var manufacturers = new List<Manufacturer> {
             new() { Id = Guid.NewGuid(), Name = "Dell Technologies" },
             new() { Id = Guid.NewGuid(), Name = "Cisco Systems" },
@@ -50,7 +74,7 @@ public static class DbSeeder
         };
         context.Manufacturers.AddRange(manufacturers);
 
-        // --- 4. ASSET TYPEN (Vollständiger Scope inkl. neue Lokation/Org/Partner) ---
+        // --- 6. ASSET TYPEN (Vollständiger Scope) ---
         var typeMap = new Dictionary<string, Guid>();
         string[] allTypeNames = { 
             // 1. Hardware
@@ -75,17 +99,13 @@ public static class DbSeeder
             "EDR-Software", "Backup-Software",
             // 6. Services & Lizenzen
             "Business-Service", "Software-Lizenz", "Wartungsvertrag", "SSL-Zertifikat",
-            
-            // NEU: 7. Lokations-Hierarchie
+            // 7. Lokations-Hierarchie
             "Land", "Bundesland", "Gemeinde", "Stadt", "Ortsteil", "Adresse", "Gebäude", "Etage", "Stockwerk", "Raum", "Stellplatz",
-            
-            // NEU: 8. Personen & Rollen
+            // 8. Personen & Rollen
             "Person", "Kontakt", "Vorgesetzter", "Dienststellenleitung", "Standortleiter", "C-Level",
-            
-            // NEU: 9. Organisation
+            // 9. Organisation
             "Gruppe", "Team", "Kostenstelle",
-            
-            // NEU: 10. Externe Partner & Lieferanten
+            // 10. Externe Partner & Lieferanten
             "Lieferant", "Vendor", "Dienstleister", "MSP", "Wartungspartner", "Hersteller"
         };
 
@@ -101,10 +121,9 @@ public static class DbSeeder
         var ipAddresses = new List<IpAddress>();
         var rng = new Random();
 
-        // --- 5. MASSEN-SEEDING (Dynamische Payloads je nach Kategorie) ---
+        // --- 7. MASSEN-SEEDING MIT DETAIL-PAYLOADS ---
         foreach (var typeName in allTypeNames)
         {
-            // Generiere 3 bis 6 Instanzen pro Sub-Typ, um in Summe > 300 Assets zu haben
             int count = rng.Next(3, 7);
             for (int i = 1; i <= count; i++)
             {
@@ -121,7 +140,7 @@ public static class DbSeeder
                     LifecycleStatus = "Produktiv"
                 };
 
-                // JSON-Payload Logik (Spezifisch für die Ansicht in AssetDetails.razor)
+                // JSON-Payload Logik (Wiederherstellung der Detailtiefe)
                 object dynamicData;
 
                 if (typeName is "Land" or "Bundesland" or "Gemeinde" or "Stadt" or "Ortsteil" or "Adresse" or "Gebäude" or "Etage" or "Stockwerk" or "Raum" or "Stellplatz")
@@ -171,10 +190,6 @@ public static class DbSeeder
                 {
                     dynamicData = new { Contract = new { Type = "Enterprise Agreement", Seats = $"{rng.Next(10, 1000)}", Renewal = DateTime.Now.AddMonths(rng.Next(1, 36)).ToString("yyyy-MM-dd") } };
                 }
-                else if (typeName.Contains("Service") || typeName.Contains("System") || typeName.Contains("Server") || typeName.Contains("Software"))
-                {
-                    dynamicData = new { Service = new { Criticality = "Mission Critical", SLA = "99.99%", Team = "Application Management" } };
-                }
                 else
                 {
                     dynamicData = new { General = new { Note = "Standard Asset" } };
@@ -183,7 +198,7 @@ public static class DbSeeder
                 asset.DynamicDataJson = JsonSerializer.Serialize(dynamicData);
                 assets.Add(asset);
 
-                // Netzwerk-Konfiguration für IP-fähige Geräte (1:n Beziehung)
+                // IPAM-Konfiguration für IP-fähige Geräte
                 if (typeName is "Rack-Server" or "Blade-Center" or "Laptop" or "Desktop" or "Workstation" or "Core-Switch" or "Access-Switch" or "Router" or "Firewall" or "Access-Point" or "Cloud-Instanz" or "Hypervisor-Host" or "Docker-Host")
                 {
                     ipAddresses.Add(new IpAddress

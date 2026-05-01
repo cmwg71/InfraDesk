@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="InfraDesk.UI.Web.styles.css" />
     
-    <!-- FIX: Hier wird nun dein eigenes Favicon (.ico) geladen -->
     <link rel="icon" type="image/x-icon" href="InfraDesk_Logo.ico" />
     
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
@@ -17,7 +16,10 @@
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <!-- Der CascadingAuthenticationState liefert den Auth-Status an alle Unterkomponenten -->
+    <CascadingAuthenticationState>
+        <Routes @rendermode="InteractiveServer" />
+    </CascadingAuthenticationState>
     
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>

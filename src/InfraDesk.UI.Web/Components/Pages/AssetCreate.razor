@@ -10,342 +10,337 @@
 
 <PageTitle>InfraDesk - @(IsEditMode ? "Asset bearbeiten" : "Neues Asset anlegen")</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="mt-6 mb-16">
-    <MudText Typo="Typo.h4" Class="mb-8 font-weight-bold">@(IsEditMode ? $"Objekt bearbeiten: {_newAsset.Name}" : "Neues Objekt anlegen")</MudText>
+<style>
+    /* PDQ Inventory Style: High Density Layout */
+    .pdq-container { background-color: #fff; height: calc(100vh - 150px); display: flex; flex-direction: row; border: 1px solid #ccc; border-radius: 0 0 4px 4px; border-top: none; overflow: hidden; }
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 24px; }
+    
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 16px; margin-top: 24px; }
+    .pdq-section-header:first-child { margin-top: 0; border-top: none; }
+    
+    .pdq-toolbar { height: 48px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px 4px 0 0; display: flex; align-items: center; padding: 0 16px; margin-top: 24px; }
+    
+    /* Wizard Step Styles in Sidebar */
+    .wizard-step { padding: 12px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; transition: background-color 0.2s; }
+    .wizard-step.active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
+    .wizard-step.completed { color: var(--mud-palette-success); }
+</style>
 
-    <!-- Wizard Step Indicator -->
-    <MudPaper Class="pa-6 mb-8" Elevation="2" Style="border-radius: 16px;">
-        <div class="d-flex align-center justify-space-between px-10">
-            @for (int i = 1; i <= 5; i++)
-            {
-                int step = i; // Lokale Variable für korrekte Blazor-Bindung
-                
-                <div @key="step" class="d-flex flex-column align-center" style="width: 100px;">
-                    <MudAvatar Color="@GetStepColor(step)" Variant="@GetStepVariant(step)" Size="@(step == _currentStep ? Size.Large : Size.Medium)" Class="mb-2 font-weight-bold" Style="transition: all 0.3s ease-in-out;">
-                        @if (step < _currentStep)
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
-                        }
-                        else
-                        {
-                            @step
-                        }
-                    </MudAvatar>
-                    <MudText Typo="Typo.caption" Align="Align.Center" Style="@(step == _currentStep ? "font-weight: bold; color: var(--mud-palette-primary);" : (step < _currentStep ? "font-weight: bold; color: var(--mud-palette-success);" : "opacity: 0.5;"))">
-                        @GetStepName(step)
-                    </MudText>
-                </div>
-                @if (step < 5)
-                {
-                    <MudDivider Class="flex-grow-1 mx-4" Style="@($"border-width: 2px; border-color: {(step < _currentStep ? "var(--mud-palette-success)" : "var(--mud-palette-lines-default)")}; transition: all 0.3s ease-in-out;")" />
-                }
-            }
-        </div>
-    </MudPaper>
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-8">
 
-    <MudPaper Class="pa-8" Elevation="2" Style="border-radius: 16px; min-height: 500px; position: relative;">
+    <!-- PDQ Toolbar (Kopfzeile) -->
+    <div class="pdq-toolbar">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" Size="Size.Small" Class="mr-2" />
+        <MudIcon Icon="@(IsEditMode ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddBox)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+        <MudText Typo="Typo.body2" Class="font-weight-bold">@(IsEditMode ? $"Objekt bearbeiten: {_newAsset.Name}" : "Neues Objekt anlegen")</MudText>
         
-        @if (_isLoading)
+        <MudSpacer />
+        
+        <!-- Navigation Buttons -->
+        <MudButton Disabled="@(_currentStepIndex == 0)" OnClick="PrevStep" Variant="Variant.Outlined" Size="Size.Small" Class="mr-2" Style="background-color: white;">Zurück</MudButton>
+        @if (_currentStepIndex < ActiveSteps.Count - 1)
         {
-            <div class="d-flex justify-center align-center" style="height: 400px;">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            </div>
+            <MudButton OnClick="NextStep" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanProceed())">Weiter</MudButton>
         }
         else
         {
-            <!-- SCHRITT 1: KATEGORIE & TYP -->
-            @if (_currentStep == 1)
+            <MudButton OnClick="SubmitAsset" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" Disabled="@(!CanProceed())">@(IsEditMode ? "Änderungen speichern" : "Asset anlegen")</MudButton>
+        }
+    </div>
+
+    <!-- PDQ Hauptbereich -->
+    <div class="pdq-container">
+        
+        <!-- LINKE SEITE: Wizard Navigation -->
+        <div class="pdq-sidebar">
+            <div class="pdq-section-header" style="margin-bottom: 0;">Erstellungsprozess</div>
+            
+            @for (int i = 0; i < ActiveSteps.Count; i++)
             {
-                <MudText Typo="Typo.h5" Class="mb-6 font-weight-bold">1. Vorlage & Kategorie wählen</MudText>
-                <MudText Typo="Typo.body1" Class="mb-8" Color="Color.Secondary">Die gewählte Kategorie bestimmt, welche Felder und Verknüpfungen (z.B. IPAM) in den nächsten Schritten verfügbar sind.</MudText>
+                int index = i;
+                var step = ActiveSteps[index];
+                bool isActive = index == _currentStepIndex;
+                bool isCompleted = index < _currentStepIndex;
 
-                <MudGrid Spacing="4">
-                    <MudItem xs="12" md="4">
-                        <MudSelect T="string" Label="Hauptkategorie" @bind-Value="SelectedCategory" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
-                            @foreach (var cat in _categoryMap.Keys)
-                            {
-                                <MudSelectItem Value="@cat">@cat</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="8">
-                        @if (!string.IsNullOrEmpty(SelectedCategory))
-                        {
-                            <MudSelect T="AssetType" Label="Spezifischer Asset-Typ" @bind-Value="_selectedType" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" ToStringFunc="@(t => t == null ? "" : t.Name)">
-                                @foreach (var typeName in _categoryMap[SelectedCategory])
-                                {
-                                    var t = _availableTypes.FirstOrDefault(x => x.Name == typeName);
-                                    if (t != null)
-                                    {
-                                        <MudSelectItem Value="@t">
-                                            <div class="d-flex align-center">
-                                                <MudIcon Icon="@GetIconForType(t.Name)" Size="Size.Small" Class="mr-3" Color="Color.Primary" />
-                                                @t.Name
-                                            </div>
-                                        </MudSelectItem>
-                                    }
-                                }
-                            </MudSelect>
-                        }
-                    </MudItem>
-                </MudGrid>
+                <div class="wizard-step @(isActive ? "active" : "") @(isCompleted ? "completed" : "")">
+                    <MudIcon Icon="@(isCompleted ? Icons.Material.Filled.CheckCircle : step.Icon)" Size="Size.Small" Class="mr-3" />
+                    <span style="font-size: 0.85rem;">@step.Name</span>
+                </div>
+            }
+        </div>
 
-                @if (_selectedType != null)
+        <!-- RECHTE SEITE: Formular-Inhalte -->
+        <div class="pdq-content">
+            @if (_isLoading)
+            {
+                <div class="d-flex justify-center align-center" style="height: 100%;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            }
+            else
+            {
+                var currentStepDef = ActiveSteps[_currentStepIndex];
+
+                <!-- SCHRITT 1: KATEGORIE & TYP -->
+                @if (currentStepDef.Id == "Category")
                 {
-                    <MudAlert Severity="Severity.Info" Class="mt-8" Variant="Variant.Filled" Style="border-radius: 8px;">
-                        Gewählte Vorlage: <b>@_selectedType.Name</b>. Das Formular wird nun dynamisch für diesen Typ aufgebaut.
-                    </MudAlert>
-                }
-            }
-
-            <!-- SCHRITT 2: STAMMDATEN -->
-            @if (_currentStep == 2)
-            {
-                <MudText Typo="Typo.h5" Class="mb-6 font-weight-bold">2. Allgemeine Stammdaten</MudText>
-                
-                <MudGrid Spacing="4">
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_newAsset.Name" Label="Bezeichnung / Hostname *" Variant="Variant.Outlined" Required="true" HelperText="Eindeutiger Name des Objekts" />
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_newAsset.AssetTag" Label="Asset-Tag / Inventarnummer" Variant="Variant.Outlined" HelperText="Wird auf das Etikett gedruckt" />
-                    </MudItem>
+                    <div class="pdq-section-header">1. Vorlage & Identifikation</div>
                     
-                    <MudItem xs="12" md="6">
-                        <MudSelect T="Guid?" Label="Hersteller" @bind-Value="_newAsset.ManufacturerId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Clearable="true">
-                            @foreach (var m in _manufacturers)
-                            {
-                                <MudSelectItem T="Guid?" Value="@m.Id">@m.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudTextField @bind-Value="_newAsset.SerialNumber" Label="Seriennummer (S/N)" Variant="Variant.Outlined" />
-                    </MudItem>
-
-                    <MudItem xs="12">
-                        <MudSelect T="string" Label="Lifecycle Status *" @bind-Value="_newAsset.LifecycleStatus" Variant="Variant.Outlined" Required="true" AnchorOrigin="Origin.BottomCenter">
-                            <MudSelectItem Value="@("In Planung")">In Planung</MudSelectItem>
-                            <MudSelectItem Value="@("In Bestellung")">In Bestellung</MudSelectItem>
-                            <MudSelectItem Value="@("Auf Lager")">Auf Lager</MudSelectItem>
-                            <MudSelectItem Value="@("Produktiv")">Produktiv</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                </MudGrid>
-            }
-
-            <!-- SCHRITT 3: BEZIEHUNGEN (WO & WER) -->
-            @if (_currentStep == 3)
-            {
-                <MudText Typo="Typo.h5" Class="mb-6 font-weight-bold">3. Logische & Physische Verknüpfungen</MudText>
-                
-                <MudGrid Spacing="6">
-                    <MudItem xs="12" md="6">
-                        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
-                            <MudText Typo="Typo.h6" Class="mb-4 d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-2" /> Das "Wo" (Lokation)</MudText>
-                            <MudText Typo="Typo.caption" Class="mb-4 d-block">Wählen Sie den genauen Standort aus der Hierarchie (Land > Gebäude > Raum).</MudText>
-                            
-                            <MudSelect T="Guid?" Label="Standort / Hierarchie-Knoten" @bind-Value="_newAsset.LocationId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Clearable="true">
-                                @foreach (var loc in _locations)
-                                {
-                                    <MudSelectItem T="Guid?" Value="@loc.Id">@loc.Name (@loc.Address)</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudPaper>
-                    </MudItem>
-
-                    <MudItem xs="12" md="6">
-                        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
-                            <MudText Typo="Typo.h6" Class="mb-4 d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.PersonSearch" Class="mr-2" /> Das "Wer" (Organisation)</MudText>
-                            <MudText Typo="Typo.caption" Class="mb-4 d-block">Wem ist dieses Asset zugeordnet oder wer ist verantwortlich?</MudText>
-                            
-                            <MudSelect T="Guid?" Label="Verantwortliche Person" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Clearable="true">
-                                @foreach (var p in _persons)
-                                {
-                                    <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudPaper>
-                    </MudItem>
-                </MudGrid>
-            }
-
-            <!-- SCHRITT 4: SPEZIFIKATIONEN -->
-            @if (_currentStep == 4)
-            {
-                <MudText Typo="Typo.h5" Class="mb-6 font-weight-bold">4. Spezifikationen (@_selectedType?.Name)</MudText>
-                <MudText Typo="Typo.body2" Class="mb-6">Diese Attribute werden dynamisch als JSON-Payload in der CMDB gespeichert.</MudText>
-
-                <MudGrid Spacing="4">
-                    @if (SelectedCategory == "Hardware")
+                    @if (string.IsNullOrWhiteSpace(CompanyPrefix))
                     {
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynModel" Label="Modell" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynChassis" Label="Chassis / Formfaktor" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynCpu" Label="CPU / Prozessor" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynRam" Label="Arbeitsspeicher (RAM)" Variant="Variant.Outlined" /></MudItem>
-                    }
-                    else if (SelectedCategory == "Cloud")
-                    {
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynProvider" Label="Cloud Provider (AWS, Azure...)" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynRegion" Label="Region / Zone" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynInstance" Label="Instanz-Typ (z.B. t3.medium)" Variant="Variant.Outlined" /></MudItem>
-                    }
-                    else if (SelectedCategory == "Network")
-                    {
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynPorts" Label="Port-Anzahl & Typ" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynFirmware" Label="Firmware Version" Variant="Variant.Outlined" /></MudItem>
-                    }
-                    else if (SelectedCategory == "License")
-                    {
-                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynLicenseType" Label="Vertragsart" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynSeats" Label="Anzahl Lizenzen (Seats)" Variant="Variant.Outlined" /></MudItem>
-                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynRenewal" Label="Ablaufdatum" Variant="Variant.Outlined" /></MudItem>
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-6" Style="border-radius: 4px;">
+                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Stammdaten fehlen!</MudText>
+                            <MudText Typo="Typo.body2">Bevor Sie neue Assets anlegen können, müssen Sie in den System-Einstellungen zwingend Ihr Firmen-Kürzel und den Hauptstandort konfigurieren.</MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Class="mt-3" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/settings"))">Zu den Einstellungen wechseln</MudButton>
+                        </MudAlert>
                     }
                     else
                     {
-                        <MudItem xs="12">
-                            <MudTextField @bind-Value="_dynNotes" Label="Zusätzliche Notizen / Spezifika" Variant="Variant.Outlined" Lines="4" />
-                        </MudItem>
-                    }
-                </MudGrid>
-            }
+                        <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">Die gewählten Parameter definieren das Asset-Tag Schema und den dynamischen Erstellungsprozess.</MudText>
 
-            <!-- SCHRITT 5: NETZWERK & IPAM -->
-            @if (_currentStep == 5)
-            {
-                <MudText Typo="Typo.h5" Class="mb-6 font-weight-bold">5. IPAM: Netzwerkschnittstellen</MudText>
-                
-                @if (RequiresIPAM())
-                {
-                    <MudText Typo="Typo.body1" Class="mb-6">Weisen Sie diesem Gerät eine oder mehrere IP-Adressen aus dem IPAM-Modul zu.</MudText>
-                    
-                    <MudPaper Class="pa-6 mb-6" Elevation="0" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
-                        <MudGrid Spacing="4" VerticalAlignment="VerticalAlignment.Bottom">
+                        <MudGrid Spacing="2" Class="mb-4">
                             <MudItem xs="12" md="4">
-                                <MudSelect T="Guid?" Label="1. Subnetz wählen" @bind-Value="_selectedSubnetId" Variant="Variant.Filled" AnchorOrigin="Origin.BottomCenter" Style="background-color: white;">
-                                    @foreach (var sub in _subnets)
-                                    {
-                                        <MudSelectItem T="Guid?" Value="@sub.Id">@sub.Name (@sub.NetworkAddress/@sub.CidrMask)</MudSelectItem>
-                                    }
+                                <MudTextField Value="CompanyPrefix" Label="Firma (Kürzel)" Variant="Variant.Outlined" ReadOnly="true" Margin="Margin.Dense" HelperText="Zentral verwaltet" />
+                            </MudItem>
+                            <MudItem xs="12" md="8">
+                                <MudSelect T="Guid?" Label="Physischer Standort" @bind-Value="SelectedLocationId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true" HelperText="Definiert das Orts-Kürzel">
+                                    @foreach (var loc in _locations) { <MudSelectItem T="Guid?" Value="@loc.Id">@loc.Name</MudSelectItem> }
                                 </MudSelect>
                             </MudItem>
+                        </MudGrid>
+
+                        <div class="pdq-section-header">Kategorisierung</div>
+                        <MudGrid Spacing="2">
                             <MudItem xs="12" md="4">
-                                <MudTextField @bind-Value="_newIpAddress" Label="2. IP-Adresse eingeben" Variant="Variant.Filled" Placeholder="z.B. 10.0.20.55" Style="background-color: white;" />
+                                <MudSelect T="string" Label="Hauptkategorie" @bind-Value="SelectedCategory" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                                    @foreach (var cat in _categoryMap.Keys) { <MudSelectItem Value="@cat">@cat</MudSelectItem> }
+                                </MudSelect>
                             </MudItem>
-                            <MudItem xs="12" md="3">
-                                <MudTextField @bind-Value="_newMacAddress" Label="MAC-Adresse (Optional)" Variant="Variant.Filled" Style="background-color: white;" />
-                            </MudItem>
-                            <MudItem xs="12" md="1">
-                                <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large" OnClick="AddInterface" />
+                            <MudItem xs="12" md="8">
+                                @if (!string.IsNullOrEmpty(SelectedCategory))
+                                {
+                                    <MudSelect T="AssetType" Label="Spezifischer Asset-Typ" @bind-Value="SelectedType" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" ToStringFunc="@(t => t == null ? "" : t.Name)">
+                                        @foreach (var typeName in _categoryMap[SelectedCategory])
+                                        {
+                                            var t = _availableTypes.FirstOrDefault(x => x.Name == typeName);
+                                            if (t != null)
+                                            {
+                                                <MudSelectItem Value="@t">
+                                                    <div class="d-flex align-center"><MudIcon Icon="@GetIconForType(t.Name)" Size="Size.Small" Class="mr-3" Color="Color.Primary"/>@t.Name</div>
+                                                </MudSelectItem>
+                                            }
+                                        }
+                                    </MudSelect>
+                                }
                             </MudItem>
                         </MudGrid>
-                    </MudPaper>
-
-                    <MudTable Items="@_interfaces" Dense="true" Hover="true" Elevation="0" Outlined="true">
-                        <HeaderContent>
-                            <MudTh>Subnetz</MudTh>
-                            <MudTh>IP-Adresse</MudTh>
-                            <MudTh>MAC-Adresse</MudTh>
-                            <MudTh>Aktion</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd>@(_subnets.FirstOrDefault(s => s.Id == context.SubnetId)?.Name ?? "Unbekannt")</MudTd>
-                            <MudTd><strong>@context.Address</strong></MudTd>
-                            <MudTd>@context.MacAddress</MudTd>
-                            <MudTd>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _interfaces.Remove(context))" />
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                    }
                 }
-                else
+
+                <!-- SCHRITT 2: STAMMDATEN & AUTO-TAG -->
+                @if (currentStepDef.Id == "Basics")
                 {
-                    <div class="d-flex flex-column align-center justify-center py-12 opacity-50">
-                        <MudIcon Icon="@Icons.Material.Filled.PowerOff" Size="Size.Large" Class="mb-4" />
-                        <MudText Typo="Typo.h6">Keine IPAM-Verknüpfung erforderlich.</MudText>
-                        <MudText Typo="Typo.body2">Dieser Asset-Typ (z.B. Lizenz, Standort, Passive Hardware) benötigt keine IP-Adresse.</MudText>
-                    </div>
+                    <div class="pdq-section-header">2. Basis-Informationen</div>
+                    
+                    <MudGrid Spacing="2" Class="mb-6">
+                        <MudItem xs="12" md="8">
+                            <MudTextField @bind-Value="_newAsset.Name" Label="Bezeichnung / Hostname / Name *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <!-- AUTO-TAG FELD -->
+                            <MudTextField @bind-Value="_newAsset.AssetTag" Label="Asset-Tag (Auto-ID)" Variant="Variant.Filled" Margin="Margin.Dense" ReadOnly="true" 
+                                          Adornment="Adornment.End" AdornmentIcon="@(_isGeneratingTag ? "" : Icons.Material.Filled.AutoMode)"
+                                          Style="background-color: var(--mud-palette-background-grey); font-weight: bold; font-family: monospace;" />
+                            @if (_isGeneratingTag) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-1" /> }
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="pdq-section-header">Lebenszyklus</div>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="string" Label="Status *" @bind-Value="_newAsset.LifecycleStatus" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" AnchorOrigin="Origin.BottomCenter">
+                                <MudSelectItem Value="@("In Planung")">In Planung</MudSelectItem>
+                                <MudSelectItem Value="@("Produktiv")">Produktiv</MudSelectItem>
+                                <MudSelectItem Value="@("Ausgemustert")">Ausgemustert</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                }
+
+                <!-- SCHRITT 3: DYNAMISCHE SPEZIFIKATIONEN -->
+                @if (currentStepDef.Id == "Specs")
+                {
+                    <div class="pdq-section-header">3. Details: @SelectedCategory (@_selectedType?.Name)</div>
+
+                    <MudGrid Spacing="2">
+                        @if (SelectedCategory == "Organization" || SelectedCategory == "Person")
+                        {
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynJobTitle" Label="Position / Rolle" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynDepartment" Label="Abteilung / Team" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynEmail" Label="E-Mail Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynPhone" Label="Telefonnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="Guid?" Label="Vorgesetzter (Manager)" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true">
+                                    @foreach (var p in _persons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                                </MudSelect>
+                            </MudItem>
+                        }
+                        else if (SelectedCategory == "Hardware")
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="Guid?" Label="Hersteller" @bind-Value="_newAsset.ManufacturerId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true">
+                                    @foreach (var m in _manufacturers) { <MudSelectItem T="Guid?" Value="@m.Id">@m.Name</MudSelectItem> }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_newAsset.SerialNumber" Label="Seriennummer (S/N)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynModel" Label="Modell" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynCpu" Label="CPU / Prozessor" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynRam" Label="RAM" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                        }
+                        else if (SelectedCategory == "License")
+                        {
+                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynLicenseType" Label="Vertragsart" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynSeats" Label="Anzahl Lizenzen (Seats)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynRenewal" Label="Ablaufdatum" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                        }
+                        else
+                        {
+                            <MudItem xs="12"><MudTextField @bind-Value="_dynNotes" Label="Notizen" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" /></MudItem>
+                        }
+                    </MudGrid>
+                }
+
+                <!-- SCHRITT 4: IPAM (NUR BEI NETZWERKGERÄTEN) -->
+                @if (currentStepDef.Id == "Network")
+                {
+                    <div class="pdq-section-header">4. IPAM: Netzwerkschnittstellen</div>
+                    <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">Weisen Sie diesem Gerät feste IP-Adressen aus verwalteten Subnetzen zu.</MudText>
+                    
+                    <MudGrid Spacing="2" VerticalAlignment="VerticalAlignment.Bottom" Class="mb-6">
+                        <MudItem xs="12" md="4">
+                            <MudSelect T="Guid?" Label="1. Subnetz wählen" @bind-Value="_selectedSubnetId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach(var sub in _subnets) { <MudSelectItem T="Guid?" Value="@sub.Id">@sub.Name (@sub.NetworkAddress)</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_newIpAddress" Label="2. IP-Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudTextField @bind-Value="_newMacAddress" Label="MAC-Adresse (Optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="AddInterface" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="pdq-section-header">Zugeordnete Interfaces</div>
+                    <MudDataGrid Items="@_interfaces" Dense="true" Bordered="true" Elevation="0">
+                        <Columns>
+                            <TemplateColumn Title="Subnetz">
+                                <CellTemplate>
+                                    @(_subnets.FirstOrDefault(s => s.Id == context.Item.SubnetId)?.Name)
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Address" Title="IP-Adresse" />
+                            <PropertyColumn Property="x => x.MacAddress" Title="MAC-Adresse" />
+                            <TemplateColumn Title="Aktion" CellClass="d-flex justify-end">
+                                <CellTemplate>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _interfaces.Remove(context.Item))" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </MudDataGrid>
                 }
             }
-
-            <!-- Navigation Buttons (Bottom) -->
-            <div class="d-flex align-center mt-12 pt-6" style="border-top: 1px solid var(--mud-palette-lines-default);">
-                <MudButton Disabled="@(_currentStep == 1)" OnClick="PrevStep" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Large">Zurück</MudButton>
-                <MudSpacer />
-                @if (_currentStep < 5)
-                {
-                    <MudButton OnClick="NextStep" Variant="Variant.Filled" Color="Color.Primary" EndIcon="@Icons.Material.Filled.ArrowForward" Size="Size.Large" Disabled="@(!CanProceed())">Weiter</MudButton>
-                }
-                else
-                {
-                    <MudButton OnClick="SubmitAsset" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" Size="Size.Large" Disabled="@(!CanProceed())">@(IsEditMode ? "Änderungen speichern" : "Asset anlegen")</MudButton>
-                }
-            </div>
-
-        }
-    </MudPaper>
+        </div>
+    </div>
 </MudContainer>
 
 @code {
     [Parameter] public Guid? Id { get; set; }
     private bool IsEditMode => Id.HasValue;
 
-    private int _currentStep = 1;
+    public class WizardStep { public string Id {get;set;}=""; public string Name {get;set;}=""; public string Icon {get;set;}=""; }
+    private List<WizardStep> ActiveSteps = new();
+    private int _currentStepIndex = 0;
+    
     private bool _isLoading = true;
+    private bool _isGeneratingTag = false;
     
-    // Basis-Daten
-    private Asset _newAsset = new() { Name = "" };
+    private Asset _newAsset = new() { Name = "", LifecycleStatus = "Produktiv" };
     
+    private string _companyPrefix = "";
+    public string CompanyPrefix
+    {
+        get => _companyPrefix;
+        set {
+            if (_companyPrefix != value) {
+                _companyPrefix = value;
+                _ = TriggerTagGeneration(); 
+            }
+        }
+    }
+
     private string _selectedCategory = "";
     public string SelectedCategory
     {
         get => _selectedCategory;
-        set
-        {
-            if (_selectedCategory != value)
-            {
+        set {
+            if (_selectedCategory != value) {
                 _selectedCategory = value;
-                // Verhindert das versehentliche Zurücksetzen beim initialen Laden im Edit-Modus
-                if (!_isLoading) _selectedType = null;
+                if (!_isLoading) {
+                    _selectedType = null; 
+                    RebuildSteps(); 
+                }
             }
         }
     }
     
     private AssetType? _selectedType;
+    public AssetType? SelectedType
+    {
+        get => _selectedType;
+        set {
+            if (_selectedType != value) {
+                _selectedType = value;
+                _ = TriggerTagGeneration(); 
+            }
+        }
+    }
+
+    public Guid? SelectedLocationId
+    {
+        get => _newAsset.LocationId;
+        set {
+            if (_newAsset.LocationId != value) {
+                _newAsset.LocationId = value;
+                _ = TriggerTagGeneration(); 
+            }
+        }
+    }
     
-    // Lookups aus DB
     private List<AssetType> _availableTypes = new();
     private List<Manufacturer> _manufacturers = new();
     private List<Location> _locations = new();
     private List<Person> _persons = new();
     private List<Subnet> _subnets = new();
 
-    // IPAM State
     private Guid? _selectedSubnetId;
-    private string _newIpAddress = "";
-    private string _newMacAddress = "";
+    private string _newIpAddress = "", _newMacAddress = "";
     private List<IpAddress> _interfaces = new();
 
-    // Dynamische Felder
-    private string _dynModel = "", _dynChassis = "", _dynCpu = "", _dynRam = "";
-    private string _dynProvider = "", _dynRegion = "", _dynInstance = "";
-    private string _dynPorts = "", _dynFirmware = "";
-    private string _dynLicenseType = "", _dynSeats = "", _dynRenewal = "";
-    private string _dynNotes = "";
+    private string _dynModel = "", _dynCpu = "", _dynRam = "";
+    private string _dynJobTitle = "", _dynDepartment = "", _dynEmail = "", _dynPhone = "";
+    private string _dynLicenseType = "", _dynSeats = "", _dynRenewal = "", _dynNotes = "";
 
-    // Kategorisierungs-Logik
     private Dictionary<string, List<string>> _categoryMap = new()
     {
-        { "Hardware", new() { "Rack-Server", "Blade-Center", "Laptop", "Desktop", "Workstation", "Mainframe", "Backup-Appliance", "Tablet", "Smartphone", "Netzwerkdrucker", "Monitor" } },
-        { "Network", new() { "Core-Switch", "Access-Switch", "Router", "Firewall", "Access-Point", "WLAN-Controller", "VPN-Gateway", "Load-Balancer", "IDS-IPS-System" } },
-        { "Storage", new() { "SAN-Storage", "NAS-System", "Tape-Library", "NVMe-Array" } },
-        { "Datacenter", new() { "USV-Anlage", "PDU", "Klimagerät", "Rack", "Stellplatz" } },
-        { "Cloud", new() { "Cloud-Instanz", "S3-Bucket", "Kubernetes-Cluster", "Docker-Host", "Entra-ID-Tenant" } },
-        { "Software", new() { "Betriebssystem", "MS-SQL-Server", "Oracle-DB", "PostgreSQL-DB", "Active-Directory-Domain" } },
-        { "Service", new() { "Business-Service", "IT-Service", "ERP-System", "Exchange-Server" } },
-        { "License", new() { "Software-Lizenz", "Wartungsvertrag", "SSL-Zertifikat" } },
-        { "Location", new() { "Land", "Bundesland", "Stadt", "Gebäude", "Raum" } },
-        { "Organization", new() { "Person", "Gruppe", "Kostenstelle", "Lieferant", "Dienstleister" } }
+        { "Hardware", new() { "Laptop", "Desktop", "Rack-Server", "Core-Switch" } },
+        { "Network", new() { "Firewall", "Access-Point", "Router" } },
+        { "Storage", new() { "SAN-Storage", "NAS-System" } },
+        { "Cloud", new() { "Cloud-Instanz", "S3-Bucket" } },
+        { "Software", new() { "Betriebssystem", "MS-SQL-Server" } },
+        { "License", new() { "Software-Lizenz", "Wartungsvertrag" } },
+        { "Organization", new() { "Person", "Team", "Kostenstelle" } }
     };
 
     protected override async Task OnInitializedAsync()
@@ -353,35 +348,25 @@
         _isLoading = true;
         try
         {
-            // Sicheres Abrufen der Metadaten
-            try { _manufacturers = await Http.GetFromJsonAsync<List<Manufacturer>>("api/manufacturers") ?? new(); } catch { }
-            try { _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new(); } catch { }
-            try { _persons = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch { }
-            try { _subnets = await Http.GetFromJsonAsync<List<Subnet>>("api/subnets") ?? new(); } catch { }
+            try {
+                var schema = await Http.GetFromJsonAsync<JsonElement>("api/settings/assettag-schema");
+                _companyPrefix = schema.GetProperty("companyPrefix").GetString() ?? "";
+            } catch { }
+
+            try { _manufacturers = await Http.GetFromJsonAsync<List<Manufacturer>>("api/manufacturers") ?? new(); } catch {}
+            try { _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new(); } catch {}
+            try { _persons = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch {}
+            try { _subnets = await Http.GetFromJsonAsync<List<Subnet>>("api/subnets") ?? new(); } catch {}
             
-            try
-            {
+            try {
                 var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
-                if (assets != null)
-                {
-                    _availableTypes = assets.Where(a => a.AssetType != null)
-                                            .Select(a => a.AssetType!)
-                                            .GroupBy(t => t.Id)
-                                            .Select(g => g.First())
-                                            .ToList();
-                }
-            }
-            catch { }
+                if (assets != null) _availableTypes = assets.Where(a => a.AssetType != null).Select(a => a.AssetType!).GroupBy(t => t.Id).Select(g => g.First()).ToList();
+            } catch { }
 
-            // Fallback für Typen
-            if (!_availableTypes.Any())
-            {
-                foreach (var list in _categoryMap.Values)
-                    foreach (var item in list)
-                        _availableTypes.Add(new AssetType { Id = Guid.NewGuid(), Name = item });
+            if (!_availableTypes.Any()) {
+                foreach(var list in _categoryMap.Values) foreach(var item in list) _availableTypes.Add(new AssetType { Id = Guid.NewGuid(), Name = item });
             }
 
-            // Wenn wir im Edit-Modus sind, laden wir das existierende Asset
             if (IsEditMode)
             {
                 var existing = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}");
@@ -389,122 +374,84 @@
                 {
                     _newAsset = existing;
                     _interfaces = existing.NetworkInterfaces?.ToList() ?? new();
-
-                    // Pre-Fill Kategorie & Typ
                     if (_newAsset.AssetType != null)
                     {
                         var typeName = _newAsset.AssetType.Name;
                         var categoryEntry = _categoryMap.FirstOrDefault(kvp => kvp.Value.Contains(typeName));
                         if (categoryEntry.Key != null)
                         {
-                            _selectedCategory = categoryEntry.Key; // Direkte Zuweisung an das Backing-Field
+                            _selectedCategory = categoryEntry.Key;
                             _selectedType = _availableTypes.FirstOrDefault(t => t.Id == _newAsset.AssetTypeId);
                         }
                     }
-
-                    // Pre-Fill Dynamische Felder (JSONB Parsing)
-                    if (!string.IsNullOrWhiteSpace(_newAsset.DynamicDataJson) && _newAsset.DynamicDataJson != "{}")
-                    {
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(_newAsset.DynamicDataJson);
-                            var root = doc.RootElement;
-                            
-                            _dynModel = GetJsonVal(root, "System", "Model");
-                            _dynChassis = GetJsonVal(root, "System", "Chassis");
-                            _dynCpu = GetJsonVal(root, "Hardware", "CPU");
-                            _dynRam = GetJsonVal(root, "Hardware", "RAM");
-                            
-                            _dynProvider = GetJsonVal(root, "Cloud", "Provider");
-                            _dynRegion = GetJsonVal(root, "Cloud", "Region");
-                            _dynInstance = GetJsonVal(root, "Cloud", "InstanceType");
-                            
-                            _dynPorts = GetJsonVal(root, "Network", "Ports");
-                            _dynFirmware = GetJsonVal(root, "Network", "Firmware");
-                            
-                            _dynLicenseType = GetJsonVal(root, "Contract", "Type");
-                            _dynSeats = GetJsonVal(root, "Contract", "Seats");
-                            _dynRenewal = GetJsonVal(root, "Contract", "Renewal");
-                            
-                            _dynNotes = GetJsonVal(root, "General", "Note");
-                        }
-                        catch { /* Fehler beim JSON Parsing ignorieren */ }
-                    }
                 }
             }
+            
+            RebuildSteps();
         }
-        finally
+        finally { _isLoading = false; }
+    }
+
+    private void RebuildSteps()
+    {
+        ActiveSteps.Clear();
+        ActiveSteps.Add(new WizardStep { Id = "Category", Name = "Vorlage", Icon = Icons.Material.Filled.Category });
+        ActiveSteps.Add(new WizardStep { Id = "Basics", Name = "Stammdaten", Icon = Icons.Material.Filled.Info });
+        ActiveSteps.Add(new WizardStep { Id = "Specs", Name = "Details", Icon = Icons.Material.Filled.Settings });
+        
+        if (SelectedCategory is "Hardware" or "Network" or "Storage")
         {
-            _isLoading = false;
+            ActiveSteps.Add(new WizardStep { Id = "Network", Name = "IPAM", Icon = Icons.Material.Filled.Lan });
         }
-    }
-
-    // Hilfsmethode zum sicheren Extrahieren von JSON-Werten
-    private string GetJsonVal(JsonElement root, string section, string prop)
-    {
-        if (root.TryGetProperty(section, out var sec) && sec.TryGetProperty(prop, out var p))
-            return p.GetString() ?? "";
-        return "";
-    }
-
-    private string GetStepName(int step) => step switch
-    {
-        1 => "Kategorie",
-        2 => "Stammdaten",
-        3 => "Beziehungen",
-        4 => "Spezifika",
-        5 => "IPAM",
-        _ => ""
-    };
-
-    private Color GetStepColor(int step)
-    {
-        if (step == _currentStep) return Color.Primary;
-        if (step < _currentStep) return Color.Success;
-        return Color.Default;
-    }
-
-    private Variant GetStepVariant(int step)
-    {
-        return step <= _currentStep ? Variant.Filled : Variant.Outlined;
-    }
-
-    private void NextStep()
-    {
-        if (_currentStep < 5) _currentStep++;
-        StateHasChanged(); // Garantiert, dass Blazor die UI sofort aktualisiert
-    }
-    
-    private void PrevStep()
-    {
-        if (_currentStep > 1) _currentStep--;
+        
+        if (_currentStepIndex >= ActiveSteps.Count) _currentStepIndex = ActiveSteps.Count > 0 ? ActiveSteps.Count - 1 : 0;
         StateHasChanged();
     }
 
-    private bool CanProceed()
+    private async Task TriggerTagGeneration()
     {
-        if (_currentStep == 1) return _selectedType != null;
-        if (_currentStep == 2) return !string.IsNullOrWhiteSpace(_newAsset.Name) && !string.IsNullOrWhiteSpace(_newAsset.LifecycleStatus);
-        return true; // Step 3, 4, 5 sind optional
+        if (IsEditMode) return; 
+        if (_selectedType == null) return;
+
+        _isGeneratingTag = true;
+        StateHasChanged();
+
+        try {
+            string locQuery = _newAsset.LocationId.HasValue ? $"&locationId={_newAsset.LocationId.Value}" : "";
+            var res = await Http.GetFromJsonAsync<JsonElement>($"api/assets/generate-tag?company={_companyPrefix}&typeId={_selectedType.Id}{locQuery}");
+            if (res.TryGetProperty("tag", out var t)) {
+                _newAsset.AssetTag = t.GetString();
+            }
+        } 
+        catch { }
+        finally { 
+            _isGeneratingTag = false; 
+            StateHasChanged(); 
+        }
     }
 
-    private bool RequiresIPAM()
+    private void NextStep() { if (_currentStepIndex < ActiveSteps.Count - 1) _currentStepIndex++; }
+    private void PrevStep() { if (_currentStepIndex > 0) _currentStepIndex--; }
+
+    private bool CanProceed()
     {
-        return SelectedCategory is "Hardware" or "Network" or "Cloud" or "Storage";
+        // Guard Clause: Falls noch keine Schritte definiert sind (während des Ladens), Button deaktivieren
+        if (ActiveSteps == null || ActiveSteps.Count == 0 || _currentStepIndex < 0 || _currentStepIndex >= ActiveSteps.Count)
+        {
+            return false;
+        }
+
+        if (ActiveSteps[_currentStepIndex].Id == "Category") return _selectedType != null && !string.IsNullOrWhiteSpace(_companyPrefix);
+        if (ActiveSteps[_currentStepIndex].Id == "Basics") return !string.IsNullOrWhiteSpace(_newAsset.Name) && !string.IsNullOrWhiteSpace(_newAsset.LifecycleStatus);
+        
+        return true; 
     }
 
     private void AddInterface()
     {
-        if (_selectedSubnetId.HasValue && !string.IsNullOrWhiteSpace(_newIpAddress))
-        {
-            _interfaces.Add(new IpAddress
-            {
-                Address = _newIpAddress,
-                MacAddress = _newMacAddress,
-                SubnetId = _selectedSubnetId.Value
-            });
-            _newIpAddress = "";
-            _newMacAddress = "";
+        if (_selectedSubnetId.HasValue && !string.IsNullOrWhiteSpace(_newIpAddress)) {
+            _interfaces.Add(new IpAddress { Address = _newIpAddress, MacAddress = _newMacAddress, SubnetId = _selectedSubnetId.Value });
+            _newIpAddress = ""; _newMacAddress = "";
         }
     }
 
@@ -513,71 +460,38 @@
         _newAsset.AssetTypeId = _selectedType!.Id;
         _newAsset.AssetType = _selectedType;
 
-        // JSON Payload generieren
         var dynamicObj = new Dictionary<string, object>();
-        if (SelectedCategory == "Hardware") dynamicObj.Add("System", new { Model = _dynModel, Chassis = _dynChassis });
+        if (SelectedCategory == "Organization") dynamicObj.Add("Contact", new { Title = _dynJobTitle, Department = _dynDepartment, Email = _dynEmail, Phone = _dynPhone });
+        if (SelectedCategory == "Hardware") dynamicObj.Add("System", new { Model = _dynModel });
         if (SelectedCategory == "Hardware") dynamicObj.Add("Hardware", new { CPU = _dynCpu, RAM = _dynRam });
-        if (SelectedCategory == "Cloud") dynamicObj.Add("Cloud", new { Provider = _dynProvider, Region = _dynRegion, InstanceType = _dynInstance });
-        if (SelectedCategory == "Network") dynamicObj.Add("Network", new { Ports = _dynPorts, Firmware = _dynFirmware });
         if (SelectedCategory == "License") dynamicObj.Add("Contract", new { Type = _dynLicenseType, Seats = _dynSeats, Renewal = _dynRenewal });
-        if (!string.IsNullOrWhiteSpace(_dynNotes)) dynamicObj.Add("General", new { Note = _dynNotes });
         
         _newAsset.DynamicDataJson = JsonSerializer.Serialize(dynamicObj);
-
         _newAsset.NetworkInterfaces = _interfaces;
 
         try
         {
-            HttpResponseMessage response;
-
-            if (IsEditMode)
-            {
-                // PUT Request für bestehende Assets
-                response = await Http.PutAsJsonAsync($"api/assets/{Id}", _newAsset);
-            }
-            else
-            {
-                // POST Request für neue Assets
-                response = await Http.PostAsJsonAsync("api/assets", _newAsset);
-            }
+            HttpResponseMessage response = IsEditMode 
+                ? await Http.PutAsJsonAsync($"api/assets/{Id}", _newAsset)
+                : await Http.PostAsJsonAsync("api/assets", _newAsset);
 
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add(IsEditMode ? "Asset erfolgreich aktualisiert!" : "Asset erfolgreich angelegt!", Severity.Success);
-                
-                if (IsEditMode)
-                {
-                    Nav.NavigateTo($"/assets/{Id}");
-                }
-                else
-                {
+                Snackbar.Add(IsEditMode ? "Asset aktualisiert!" : "Asset angelegt!", Severity.Success);
+                if (IsEditMode) Nav.NavigateTo($"/assets/{Id}");
+                else {
                     var created = await response.Content.ReadFromJsonAsync<Asset>();
-                    if (created != null) Nav.NavigateTo($"/assets/{created.Id}");
-                    else Nav.NavigateTo("/assets");
+                    Nav.NavigateTo(created != null ? $"/assets/{created.Id}" : "/assets");
                 }
             }
             else
             {
-                Snackbar.Add("Fehler beim Speichern des Assets.", Severity.Error);
+                var err = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Fehler: {err}", Severity.Error);
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"API Fehler: {ex.Message}", Severity.Error);
-        }
+        catch (Exception ex) { Snackbar.Add($"API Fehler: {ex.Message}", Severity.Error); }
     }
 
-    private string GetIconForType(string type) => type switch
-    {
-        "Laptop" => Icons.Material.Filled.Laptop,
-        "Desktop" => Icons.Material.Filled.DesktopWindows,
-        "Rack-Server" => Icons.Material.Filled.Storage,
-        "Core-Switch" => Icons.Material.Filled.Router,
-        "Firewall" => Icons.Material.Filled.Security,
-        "Cloud-Instanz" => Icons.Material.Filled.Cloud,
-        "Software-Lizenz" => Icons.Material.Filled.VpnKey,
-        "Land" or "Stadt" => Icons.Material.Filled.Place,
-        "Person" => Icons.Material.Filled.Person,
-        _ => Icons.Material.Filled.Computer
-    };
+    private string GetIconForType(string type) => Icons.Material.Filled.Computer;
 }

@@ -1,0 +1,58 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Layout/EmptyLayout.razor *@
+@inherits LayoutComponentBase
+@using MudBlazor
+@using InfraDesk.UI.Web.Services
+@inject ThemeService ThemeService
+@implements IDisposable
+
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _isDarkMode = false;
+    private MudTheme _theme = new MudTheme();
+
+    protected override void OnInitialized()
+    {
+        UpdateTheme();
+        ThemeService.OnThemeChanged += UpdateTheme;
+    }
+
+    private void UpdateTheme()
+    {
+        var cfg = ThemeService.Config;
+        _isDarkMode = cfg.IsDark;
+
+        var newTheme = new MudTheme();
+        newTheme.PaletteLight.Primary = cfg.PrimaryColor;
+        newTheme.PaletteLight.Secondary = cfg.SecondaryColor;
+        newTheme.PaletteLight.Background = cfg.BackgroundColor;
+        newTheme.PaletteLight.Surface = cfg.SurfaceColor;
+        newTheme.PaletteLight.TextPrimary = cfg.TextPrimary;
+        newTheme.PaletteLight.ActionDefault = cfg.PrimaryColor;
+        
+        newTheme.PaletteDark.Primary = cfg.PrimaryColor;
+        newTheme.PaletteDark.Background = "#0d1117";
+        newTheme.PaletteDark.Surface = "#161b22";
+        newTheme.PaletteDark.TextPrimary = "#c9d1d9";
+        
+        if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
+        {
+            newTheme.Typography.Default.FontFamily = new[] { cfg.FontFamily };
+            newTheme.Typography.Default.FontSize = $"{cfg.BaseFontSize}px";
+        }
+        
+        _theme = newTheme;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => ThemeService.OnThemeChanged -= UpdateTheme;
+}

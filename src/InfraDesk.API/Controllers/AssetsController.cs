@@ -17,7 +17,6 @@ public class AssetsController : ControllerBase
         _context = context;
     }
 
-    // GET: api/assets
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Asset>>> GetAssets()
     {
@@ -32,7 +31,6 @@ public class AssetsController : ControllerBase
             .ToListAsync();
     }
 
-    // GET: api/assets/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<Asset>> GetAsset(Guid id)
     {
@@ -49,37 +47,79 @@ public class AssetsController : ControllerBase
         return asset;
     }
 
-    // GET: api/assets/types
-    // NEU: Wird für den Wizard (Schritt 1) benötigt, um alle Vorlagen zu laden.
     [HttpGet("types")]
     public async Task<ActionResult<IEnumerable<AssetType>>> GetAssetTypes()
     {
-        return await _context.AssetTypes
-            .OrderBy(t => t.Name)
-            .ToListAsync();
+        return await _context.AssetTypes.OrderBy(t => t.Name).ToListAsync();
     }
 
-    // POST: api/assets
-    // NEU: Speichert das im Wizard erstellte Asset inkl. der IPAM-Schnittstellen in der Datenbank.
+    // NEU: Automatischer Generator für garantiert eindeutige Asset Tags
+    [HttpGet("generate-tag")]
+    public async Task<ActionResult<string>> GenerateTag([FromQuery] string company, [FromQuery] Guid? locationId, [FromQuery] Guid? typeId)
+    {
+        // 1. Firmenkürzel (Max 3 Buchstaben)
+        string comp = string.IsNullOrEmpty(company) ? "GIT" : company.Substring(0, Math.Min(3, company.Length)).ToUpper();
+
+        // 2. Standortkürzel (Max 3 Buchstaben)
+        string loc = "GLO"; // Global
+        if (locationId.HasValue)
+        {
+            var location = await _context.Locations.FindAsync(locationId);
+            if (location != null && location.Name.Length >= 3)
+                loc = location.Name.Substring(0, 3).ToUpper();
+        }
+
+        // 3. Kategoriekürzel (Max 3 Buchstaben)
+        string cat = "GEN"; // General
+        if (typeId.HasValue)
+        {
+            var type = await _context.AssetTypes.FindAsync(typeId);
+            if (type != null && type.Name.Length >= 3)
+                cat = type.Name.Substring(0, 3).ToUpper();
+        }
+
+        string prefix = $"{comp}-{loc}-{cat}-"; // z.B. GIT-FRA-LAP-
+
+        // 4. Garantiert eindeutige Nummer ermitteln (Datenbank-Lock Logik simuliert)
+        var lastAsset = await _context.Assets
+            .Where(a => a.AssetTag.StartsWith(prefix))
+            .OrderByDescending(a => a.AssetTag)
+            .FirstOrDefaultAsync();
+
+        int nextNum = 1;
+        if (lastAsset != null)
+        {
+            var parts = lastAsset.AssetTag.Split('-');
+            if (parts.Length == 4 && int.TryParse(parts[3], out int parsedNum))
+            {
+                nextNum = parsedNum + 1;
+            }
+        }
+
+        // Ergebnis z.B.: GIT-FRA-LAP-00001
+        return Ok(new { Tag = $"{prefix}{nextNum:D5}" });
+    }
+
     [HttpPost]
     public async Task<ActionResult<Asset>> PostAsset(Asset asset)
     {
-        // Für diese Demo weisen wir dem neuen Asset den ersten (bzw. einzigen) Mandanten zu.
-        // In einem Produktionssystem kommt diese ID aus dem JWT-Token des eingeloggten Users.
         var tenant = await _context.Tenants.FirstOrDefaultAsync();
         if (tenant == null) return BadRequest("Kein aktiver Mandant gefunden.");
 
         asset.TenantId = tenant.Id;
         if (asset.Id == Guid.Empty) asset.Id = Guid.NewGuid();
 
-        // WICHTIG für EF Core: Navigations-Eigenschaften auf null setzen, 
-        // da wir nur die IDs übergeben und nicht versehentlich neue Hersteller/Typen anlegen wollen.
         asset.AssetType = null;
         asset.Manufacturer = null;
         asset.Location = null;
         asset.Owner = null;
 
-        // Netzwerkschnittstellen (IPAM) korrekt verknüpfen
+        // Sicherheitsprüfung: Ist der Tag wirklich eindeutig?
+        if (await _context.Assets.AnyAsync(a => a.AssetTag == asset.AssetTag))
+        {
+            return BadRequest("Kollision: Dieses Asset-Tag existiert bereits. Bitte Formular aktualisieren.");
+        }
+
         if (asset.NetworkInterfaces != null && asset.NetworkInterfaces.Any())
         {
             foreach (var nic in asset.NetworkInterfaces)
@@ -87,7 +127,7 @@ public class AssetsController : ControllerBase
                 if (nic.Id == Guid.Empty) nic.Id = Guid.NewGuid();
                 nic.TenantId = tenant.Id;
                 nic.AssignedAssetId = asset.Id;
-                nic.Subnet = null; // Verhindert EF-Core Update-Schleifen beim Subnetz
+                nic.Subnet = null;
             }
         }
 
@@ -97,14 +137,11 @@ public class AssetsController : ControllerBase
         return CreatedAtAction(nameof(GetAsset), new { id = asset.Id }, asset);
     }
 
-    // PUT: api/assets/{id}
-    // NEU: Speichert Aktualisierungen (aus der Detailansicht heraus)
     [HttpPut("{id}")]
     public async Task<IActionResult> PutAsset(Guid id, Asset asset)
     {
         if (id != asset.Id) return BadRequest("ID Mismatch");
 
-        // Navigations-Eigenschaften nullen, um Trackings-Konflikte im EF Core zu vermeiden
         asset.AssetType = null;
         asset.Manufacturer = null;
         asset.Location = null;
@@ -118,25 +155,10 @@ public class AssetsController : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            if (!AssetExists(id)) return NotFound();
+            if (!_context.Assets.Any(e => e.Id == id)) return NotFound();
             else throw;
         }
 
         return NoContent();
-    }
-
-    // GET: api/assets/{id}/links
-    // Dient als Dummy/Platzhalter, damit die Detailansicht keine 404 Fehler wirft.
-    [HttpGet("{id}/links")]
-    public async Task<ActionResult<IEnumerable<object>>> GetAssetLinks(Guid id)
-    {
-        // Später wird dies aus einer AssetLinks-Tabelle gelesen (T1_03 CMDB-Beziehungen).
-        var dummyLinks = new List<object>();
-        return Ok(dummyLinks);
-    }
-
-    private bool AssetExists(Guid id)
-    {
-        return _context.Assets.Any(e => e.Id == id);
     }
 }

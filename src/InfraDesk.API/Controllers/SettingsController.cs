@@ -13,66 +13,157 @@ public class SettingsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
 
+    private readonly Dictionary<string, List<string>> _defaultLifecycle = new()
+    {
+        { "Planung", new List<string> { "In Evaluierung", "Budgetiert", "Bestellt" } },
+        { "Lager", new List<string> { "Auf Lager", "Ersatzteil", "Defekt" } },
+        { "Produktiv", new List<string> { "Aktiv", "Wartung", "Gesperrt" } },
+        { "End of Life", new List<string> { "Ausgemustert", "Verkauft", "Verschrottet" } }
+    };
+
     public SettingsController(ApplicationDbContext context)
     {
         _context = context;
     }
 
-    // GET: api/settings/asset-lifecycle
     [HttpGet("asset-lifecycle")]
-    public async Task<ActionResult<Dictionary<string, List<string>>>> GetAssetLifecycle()
+    public async Task<ActionResult<Dictionary<string, List<string>>>> GetLifecycle()
     {
-        var setting = await _context.SystemSettings
-            .FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
-
-        if (setting == null)
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
+        if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
         {
-            // Standardwerte zurückgeben, wenn noch nichts in der DB steht
-            return Ok(GetDefaultLifecycle());
+            try
+            {
+                var config = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(setting.Value);
+                if (config != null) return Ok(config);
+            }
+            catch { }
         }
-
-        try
-        {
-            var data = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(setting.Value);
-            return Ok(data);
-        }
-        catch
-        {
-            return BadRequest("Fehler beim Verarbeiten der Einstellungsdaten.");
-        }
+        return Ok(_defaultLifecycle);
     }
 
-    // POST: api/settings/asset-lifecycle
-    // Damit kannst du später die Liste über ein Admin-Interface speichern
     [HttpPost("asset-lifecycle")]
-    public async Task<IActionResult> SaveAssetLifecycle([FromBody] Dictionary<string, List<string>> config)
+    public async Task<ActionResult> SaveLifecycle([FromBody] Dictionary<string, List<string>> config)
     {
         var json = JsonSerializer.Serialize(config);
-        var setting = await _context.SystemSettings
-            .FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
 
-        if (setting == null)
+        if (setting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "AssetLifecycle", Value = json });
+        else setting.Value = json;
+
+        await _context.SaveChangesAsync();
+        return Ok();
+    }
+
+    // --- STAMMDATEN & UNTERNEHMENSPROFIL ---
+    [HttpGet("masterdata")]
+    public async Task<ActionResult<MasterDataDto>> GetMasterData()
+    {
+        var dto = new MasterDataDto();
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync();
+        if (tenant != null)
         {
-            _context.SystemSettings.Add(new SystemSetting { Key = "AssetLifecycle", Value = json });
+            dto.CompanyName = tenant.Name;
+            dto.Domain = tenant.Domain ?? "";
+        }
+
+        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
+        dto.CompanyPrefix = prefixSetting?.Value ?? ""; // Kein Fallback mehr! Muss vom Nutzer gesetzt werden.
+
+        var addressSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "HQAddress");
+        if (addressSetting != null && !string.IsNullOrWhiteSpace(addressSetting.Value))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(addressSetting.Value);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("Street", out var st)) dto.Street = st.GetString() ?? "";
+                if (root.TryGetProperty("ZipCity", out var zc)) dto.ZipCity = zc.GetString() ?? "";
+                if (root.TryGetProperty("State", out var stt)) dto.State = stt.GetString() ?? "";
+                if (root.TryGetProperty("Country", out var c)) dto.Country = c.GetString() ?? "";
+            }
+            catch { }
+        }
+
+        return Ok(dto);
+    }
+
+    [HttpPost("masterdata")]
+    public async Task<ActionResult> SaveMasterData([FromBody] MasterDataDto dto)
+    {
+        // Strikte Validierung der Pflichtfelder
+        if (string.IsNullOrWhiteSpace(dto.CompanyName) || string.IsNullOrWhiteSpace(dto.CompanyPrefix) || string.IsNullOrWhiteSpace(dto.ZipCity))
+        {
+            return BadRequest("Firmenname, Kürzel und PLZ/Ort sind Pflichtfelder.");
+        }
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync();
+        if (tenant == null)
+        {
+            tenant = new Tenant { Id = Guid.NewGuid(), Name = dto.CompanyName, Domain = dto.Domain };
+            _context.Tenants.Add(tenant);
         }
         else
         {
-            setting.Value = json;
+            tenant.Name = dto.CompanyName;
+            tenant.Domain = dto.Domain;
+        }
+
+        string cleanPrefix = dto.CompanyPrefix.Substring(0, Math.Min(3, dto.CompanyPrefix.Length)).ToUpper();
+        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
+        if (prefixSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "CompanyPrefix", Value = cleanPrefix });
+        else prefixSetting.Value = cleanPrefix;
+
+        var addressJson = JsonSerializer.Serialize(new { dto.Street, dto.ZipCity, dto.State, dto.Country });
+        var addrSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "HQAddress");
+        if (addrSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "HQAddress", Value = addressJson });
+        else addrSetting.Value = addressJson;
+
+        var hqName = $"HQ {dto.ZipCity.Split(' ').LastOrDefault()}".Trim();
+        var hqAddressString = $"{dto.Street}, {dto.ZipCity}, {dto.State}, {dto.Country}".Trim().Trim(',').Trim();
+
+        var hqLoc = await _context.Locations.FirstOrDefaultAsync(l => l.Name.StartsWith("HQ") || l.Name.Contains("Zentrale"));
+        if (hqLoc == null)
+        {
+            _context.Locations.Add(new Location { Id = Guid.NewGuid(), TenantId = tenant.Id, Name = hqName, Address = hqAddressString });
+        }
+        else
+        {
+            hqLoc.Name = hqName;
+            hqLoc.Address = hqAddressString;
         }
 
         await _context.SaveChangesAsync();
-        return NoContent();
+        return Ok();
     }
 
-    private Dictionary<string, List<string>> GetDefaultLifecycle()
+    [HttpGet("assettag-schema")]
+    public async Task<ActionResult<object>> GetAssetTagSchema()
     {
-        return new Dictionary<string, List<string>>
+        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
+        string prefix = prefixSetting != null ? prefixSetting.Value : "";
+
+        return Ok(new
         {
-            { "1. Planung & Design", new() { "Bedarf gemeldet", "Genehmigt", "Geplant", "In Bestellung" } },
-            { "2. Beschaffung & Vorbereitung", new() { "Erhalten", "Lagernd", "In Vorbereitung", "In Prüfung / QS" } },
-            { "3. Implementierung", new() { "In Installation", "Reserviert", "In Rollout" } },
-            { "4. Betriebsphase", new() { "Produktiv", "In Wartung", "Gestört", "In Reparatur", "Nicht Verfügbar", "Leihgabe" } },
-            { "5. Außerbetriebnahme", new() { "Abkündigungsphase", "In Außerbetriebnahme", "Ausgemustert", "Archiviert", "Entsorgt", "Verkauft", "Verloren / Gestohlen" } }
-        };
+            CompanyPrefix = prefix,
+            FormatInfo = "{Company(3)} - {Standort(3)} - {Kategorie(3)} - {Zähler(5)}"
+        });
     }
+}
+
+public class MasterDataDto
+{
+    public string CompanyName { get; set; } = "";
+    public string Domain { get; set; } = "";
+    public string CompanyPrefix { get; set; } = "";
+    public string Country { get; set; } = "";
+    public string State { get; set; } = "";
+    public string ZipCity { get; set; } = "";
+    public string Street { get; set; } = "";
+
+    // Diese Property erlaubt dem Frontend (MainLayout) in Echtzeit zu prüfen, ob die Einrichtung abgeschlossen ist
+    public bool IsSetupComplete => !string.IsNullOrWhiteSpace(CompanyName)
+                                && !string.IsNullOrWhiteSpace(CompanyPrefix)
+                                && !string.IsNullOrWhiteSpace(ZipCity);
 }

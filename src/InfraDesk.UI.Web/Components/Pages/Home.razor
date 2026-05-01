@@ -1,29 +1,145 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Home.razor *@
 @page "/"
+@using InfraDesk.Core.Entities
 @using MudBlazor
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
-@* FIX: Statischer Titel für das Dashboard *@
 <PageTitle>InfraDesk - Dashboard</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Willkommen bei InfraDesk</MudText>
+@* Wir nutzen hier MudContainer mit MaxWidth, um die Kacheln nicht an den Rand zu quetschen *@
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8 px-8">
+    
+    <div class="d-flex align-center mb-8">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary" Size="Size.Large" Class="mr-4" Style="font-size: 3rem;" />
+        <div>
+            <MudText Typo="Typo.h3" Class="font-weight-bold">System Cockpit</MudText>
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">Willkommen zurück! Hier ist der aktuelle Status Ihrer IT-Infrastruktur.</MudText>
+        </div>
+    </div>
 
-<MudGrid>
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4" Style="height:100px;">
-            <MudText Typo="Typo.h6">Assets gesamt</MudText>
-            <MudText Typo="Typo.h4">250+</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4" Style="height:100px;">
-            <MudText Typo="Typo.h6">Offene Tickets</MudText>
-            <MudText Typo="Typo.h4">12</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4" Style="height:100px;">
-            <MudText Typo="Typo.h6">System-Status</MudText>
-            <MudText Typo="Typo.h4" Color="Color.Success">Optimal</MudText>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-center align-center" style="height: 300px;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    else
+    {
+        <MudGrid Spacing="6">
+            @* Kachel 1: Assets Gesamt *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 180px; border-radius: 20px; border-bottom: 6px solid var(--mud-palette-primary);">
+                    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3" Class="font-weight-bold">@_assetsCount</MudText>
+                    <MudText Typo="Typo.button" Color="Color.Secondary">Hardware Assets</MudText>
+                </MudPaper>
+            </MudItem>
+
+            @* Kachel 2: Offene Tickets *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 180px; border-radius: 20px; border-bottom: 6px solid var(--mud-palette-error);">
+                    <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3" Class="font-weight-bold" Color="Color.Error">@_openTicketsCount</MudText>
+                    <MudText Typo="Typo.button" Color="Color.Secondary">Offene Tickets</MudText>
+                </MudPaper>
+            </MudItem>
+
+            @* Kachel 3: Standorte *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 180px; border-radius: 20px; border-bottom: 6px solid var(--mud-palette-info);">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Color="Color.Info" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3" Class="font-weight-bold">@_locationsCount</MudText>
+                    <MudText Typo="Typo.button" Color="Color.Secondary">Aktive Standorte</MudText>
+                </MudPaper>
+            </MudItem>
+
+            @* Kachel 4: System Status *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-6 d-flex flex-column align-center justify-center" Elevation="3" Style="height: 180px; border-radius: 20px; border-bottom: 6px solid var(--mud-palette-success);">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h4" Class="font-weight-bold" Color="Color.Success">OPTIMAL</MudText>
+                    <MudText Typo="Typo.button" Color="Color.Secondary">System Integrität</MudText>
+                </MudPaper>
+            </MudItem>
+
+            @* Unterer Bereich: Letzte Aktivitäten (Beispiel für echtes Feedback) *@
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-6" Elevation="2" Style="border-radius: 16px;">
+                    <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Letzte Ticket-Ereignisse</MudText>
+                    <MudList T="string" Dense="true">
+                        @if (_recentTickets.Any())
+                        {
+                            @foreach (var ticket in _recentTickets.Take(5))
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.FiberManualRecord" IconColor="@(ticket.Priority == "High" ? Color.Error : Color.Info)">
+                                    <div class="d-flex justify-space-between w-100">
+                                        <MudText Typo="Typo.body2"><strong>@ticket.Title</strong> - @ticket.Status</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@ticket.CreatedAt.ToShortDateString()</MudText>
+                                    </div>
+                                </MudListItem>
+                                <MudDivider />
+                            }
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">Keine aktuellen Tickets gefunden.</MudText>
+                        }
+                    </MudList>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-6 bg-light-blue" Elevation="2" Style="border-radius: 16px; background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Schnellzugriff</MudText>
+                    <MudStack Spacing="2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Nav.NavigateTo("/assets/create"))">Neues Asset anlegen</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true" StartIcon="@Icons.Material.Filled.Person">Mitarbeiter suchen</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" FullWidth="true" StartIcon="@Icons.Material.Filled.Settings" OnClick="@(() => Nav.NavigateTo("/settings"))">System-Setup</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private int _assetsCount = 0;
+    private int _openTicketsCount = 0;
+    private int _locationsCount = 0;
+    private List<Ticket> _recentTickets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            // 1. Assets zählen
+            var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
+            _assetsCount = assets?.Count ?? 0;
+
+            // 2. Tickets laden und filtern
+            var tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets");
+            if (tickets != null)
+            {
+                _recentTickets = tickets.OrderByDescending(t => t.CreatedAt).ToList();
+                _openTicketsCount = tickets.Count(t => t.Status != "Closed");
+            }
+
+            // 3. Standorte zählen
+            var locations = await Http.GetFromJsonAsync<List<Location>>("api/locations");
+            _locationsCount = locations?.Count ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Daten konnten nicht vollständig geladen werden.", Severity.Warning);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
