@@ -1,0 +1,238 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/IpamSubnetEdit.razor *@
+@page "/ipam/subnets/create"
+@page "/ipam/subnets/edit/{Id:guid}"
+@using InfraDesk.Core.Entities
+@using MudBlazor
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>InfraDesk - @(IsEditMode ? "Subnetz bearbeiten" : "Neues Subnetz anlegen")</PageTitle>
+
+<style>
+    .pdq-container { background-color: #f4f4f4; min-height: calc(100vh - 120px); display: flex; justify-content: center; padding: 24px; }
+    .pdq-main { width: 100%; max-width: 900px; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    
+    .section-box { border: 1px solid #ccc; border-radius: 4px; margin-bottom: 16px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .section-header-compact { background-color: #e0e0e0; padding: 6px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #333; display: flex; align-items: center; border-bottom: 1px solid #ccc; }
+</style>
+
+<div class="pdq-toolbar">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/ipam"))" Size="Size.Small" Class="mr-2" />
+    <MudIcon Icon="@(IsEditMode ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddBox)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+    <MudText Typo="Typo.body2" Class="font-weight-bold">@(IsEditMode ? $"Subnetz bearbeiten: {_subnet.Name}" : "Neues Subnetz anlegen")</MudText>
+    <MudSpacer />
+    
+    @if (IsEditMode)
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" StartIcon="@Icons.Material.Filled.Delete" OnClick="ConfirmDelete" Disabled="_isSaving" Class="mr-2" Style="background-color: white;">
+            Löschen
+        </MudButton>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSubnet" Disabled="_isSaving">
+        @if (_isSaving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> }
+        @(IsEditMode ? "Änderungen speichern" : "Subnetz & IP-Pool generieren")
+    </MudButton>
+</div>
+
+<div class="pdq-container">
+    <div class="pdq-main">
+        
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center py-12"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+        }
+        else
+        {
+            @if (!IsEditMode)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-6">
+                    <strong>Hinweis:</strong> Wenn Sie ein neues Subnetz anlegen, generiert das System automatisch alle dazugehörigen IP-Objekte (z.B. 254 Adressen bei /24) in der Datenbank. Die Netzwerkadresse und CIDR-Maske können nachträglich nicht mehr geändert werden.
+                </MudAlert>
+            }
+
+            <div class="section-box">
+                <div class="section-header-compact"><MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-2"/> Basis-Konfiguration</div>
+                <div class="pa-6">
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="8">
+                            <MudTextField @bind-Value="_subnet.Name" Label="Bezeichnung (z.B. Prod-Server RZ1)" Variant="Variant.Outlined" Required="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField @bind-Value="_subnet.VlanId" Label="VLAN-ID" Variant="Variant.Outlined" Min="1" Max="4096" Clearable="true" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="12">
+                            <MudSelect T="Guid?" Label="Standort" @bind-Value="_subnet.LocationId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" HelperText="Wird für die Duplikats-Prüfung verwendet.">
+                                @foreach (var loc in _locations) { <MudSelectItem T="Guid?" Value="@loc.Id">@loc.Name</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudItem xs="12" md="5">
+                            <MudTextField @bind-Value="_subnet.NetworkAddress" Label="Netzwerk-Adresse (z.B. 10.0.10.0)" Variant="Variant.Outlined" Required="true" Disabled="@IsEditMode" />
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudNumericField @bind-Value="_subnet.CidrMask" Label="CIDR-Maske (z.B. 24)" Variant="Variant.Outlined" Required="true" Min="16" Max="30" Disabled="@IsEditMode" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_subnet.Gateway" Label="Gateway IP (Optional)" Variant="Variant.Outlined" HelperText="Wird automatisch reserviert." />
+                        </MudItem>
+                    </MudGrid>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <div class="section-header-compact"><MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Class="mr-2"/> Infrastruktur & DHCP</div>
+                <div class="pa-6">
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12">
+                            <MudCheckBox @bind-Value="_subnet.IsDhcpManaged" Label="Dieses Netz wird über einen externen DHCP-Server verwaltet." Color="Color.Primary" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_subnet.DhcpScopeStart" Label="DHCP Bereich Start" Variant="Variant.Outlined" Disabled="@(!_subnet.IsDhcpManaged)" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_subnet.DhcpScopeEnd" Label="DHCP Bereich Ende" Variant="Variant.Outlined" Disabled="@(!_subnet.IsDhcpManaged)" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_subnet.DnsServerSecondary" Label="Primärer / Sekundärer DNS" Variant="Variant.Outlined" HelperText="z.B. 10.0.1.10, 8.8.8.8" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudCheckBox @bind-Value="_subnet.IsFullScanEnabled" Label="Aktiver Discovery-Ping-Scan für dieses Netz erlauben" Color="Color.Success" />
+                        </MudItem>
+                    </MudGrid>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool IsEditMode => Id.HasValue;
+
+    private Subnet _subnet = new() { Name = "", NetworkAddress = "", CidrMask = 24, IsFullScanEnabled = true };
+    private List<Location> _locations = new();
+    private bool _isLoading = false;
+    private bool _isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new(); } catch { }
+
+        if (IsEditMode)
+        {
+            _isLoading = true;
+            try
+            {
+                var s = await Http.GetFromJsonAsync<Subnet>($"api/ipam/subnets/{Id}");
+                if (s != null) _subnet = s;
+            }
+            catch { Snackbar.Add("Fehler beim Laden des Subnetzes.", Severity.Error); }
+            finally { _isLoading = false; }
+        }
+    }
+
+    private async Task SaveSubnet()
+    {
+        if (string.IsNullOrWhiteSpace(_subnet.Name) || string.IsNullOrWhiteSpace(_subnet.NetworkAddress) || _subnet.CidrMask < 16)
+        {
+            Snackbar.Add("Bitte füllen Sie alle Pflichtfelder korrekt aus.", Severity.Warning);
+            return;
+        }
+
+        if (!IsEditMode)
+        {
+            try
+            {
+                var locQuery = _subnet.LocationId.HasValue ? $"&locationId={_subnet.LocationId.Value}" : "";
+                var isDuplicate = await Http.GetFromJsonAsync<bool>($"api/ipam/check-duplicate?network={_subnet.NetworkAddress}&cidr={_subnet.CidrMask}{locQuery}");
+                
+                if (isDuplicate)
+                {
+                    bool? proceed = await DialogService.ShowMessageBoxAsync(
+                        "Mögliches Duplikat", 
+                        "Ein Subnetz mit dieser Netzwerkadresse existiert bereits an diesem Standort. Möchten Sie es als isoliertes Netz (z.B. VRF) trotzdem anlegen?", 
+                        yesText: "Trotzdem anlegen", 
+                        cancelText: "Abbrechen");
+
+                    if (proceed != true) return;
+                }
+            }
+            catch { /* API Fehler ignorieren und fortfahren */ }
+        }
+
+        _isSaving = true;
+        try
+        {
+            HttpResponseMessage response;
+            if (IsEditMode)
+            {
+                response = await Http.PutAsJsonAsync($"api/ipam/subnets/{Id}", _subnet);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync("api/ipam/subnets", _subnet);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(IsEditMode ? "Änderungen gespeichert." : "Subnetz und IPs generiert!", Severity.Success);
+                Nav.NavigateTo("/ipam");
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Fehler: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Netzwerkfehler: {ex.Message}", Severity.Error);
+        }
+        finally { _isSaving = false; }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        bool? result = await DialogService.ShowMessageBoxAsync(
+            "Subnetz löschen", 
+            $"Möchten Sie das Subnetz '{_subnet.Name}' wirklich löschen? Alle zugehörigen IP-Adress-Objekte werden ebenfalls unwiderruflich gelöscht. Verknüpfungen an Assets werden geleert.", 
+            yesText: "Endgültig löschen", 
+            cancelText: "Abbrechen");
+
+        if (result == true)
+        {
+            _isSaving = true;
+            StateHasChanged();
+            try
+            {
+                var response = await Http.DeleteAsync($"api/ipam/subnets/{Id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Subnetz und zugehörige IPs erfolgreich gelöscht.", Severity.Success);
+                    Nav.NavigateTo("/ipam");
+                }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Fehler beim Löschen: {error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Netzwerkfehler beim Löschen: {ex.Message}", Severity.Error);
+            }
+            finally 
+            { 
+                _isSaving = false;
+                StateHasChanged(); 
+            }
+        }
+    }
+}

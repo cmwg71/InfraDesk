@@ -3,7 +3,6 @@ using InfraDesk.Core.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
 
 namespace InfraDesk.Core.Entities;
 
@@ -31,6 +30,17 @@ public class Subnet : BaseEntity
     public string? Gateway { get; set; }
 
     public int? VlanId { get; set; }
+
+    // --- STANDORT-ZUWEISUNG (Duplikat-Check) ---
+    public Guid? LocationId { get; set; }
+    public Location? Location { get; set; }
+
+    // --- NEU FÜR IPAM V2 ---
+    public bool IsDhcpManaged { get; set; }
+    public string? DhcpScopeStart { get; set; }
+    public string? DhcpScopeEnd { get; set; }
+    public bool IsFullScanEnabled { get; set; } = true;
+    public string? DnsServerSecondary { get; set; }
 
     // Alle IPs, die zu diesem Subnetz gehören
     public ICollection<IpAddress> IpAddresses { get; set; } = new List<IpAddress>();

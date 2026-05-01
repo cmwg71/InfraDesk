@@ -22,12 +22,19 @@ public class IpAddress : BaseEntity
     public string? Description { get; set; }
     public bool IsReserved { get; set; }
 
+    // --- NEU FÜR IPAM V2 ---
+    public string IpStatus { get; set; } = "Free"; // Free, Used, Reserved, Rogue
+    public DateTime? LastPingDate { get; set; }
+    public string? DnsHostname { get; set; }
+
+    // --- NEU: Auto-Discovery Bestätigung ---
+    public bool RequiresManualReview { get; set; }
+
     // Verknüpfung zum übergeordneten IPAM-Subnetz
     public Guid SubnetId { get; set; }
     public Subnet? Subnet { get; set; }
 
     // DIE WICHTIGE VERKNÜPFUNG: Gehört diese IP zu einem Asset?
-    // Wenn NULL, ist die IP "frei" oder "reserviert".
     public Guid? AssignedAssetId { get; set; }
     public Asset? AssignedAsset { get; set; }
 }

@@ -1,20 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-InfraDesk.Worker-70513c1d-9a9f-4137-84c9-b94f0376eeb6</UserSecretsId>
-    <AssemblyVersion>2026.5.1.1</AssemblyVersion>
-    <FileVersion>2026.5.1.1</FileVersion>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>dotnet-InfraDesk.Worker-70513c1d-9a9f-4137-84c9-b94f0376eeb6</UserSecretsId>
+		<AssemblyVersion>2026.5.1.1</AssemblyVersion>
+		<FileVersion>2026.5.1.1</FileVersion>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="ArpLookup" Version="2.1.88" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+		<!-- NEU hinzugefügt für die API-Kommunikation des Ping-Sweeps -->
+		<PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\InfraDesk.Application\InfraDesk.Application.csproj" />
-    <ProjectReference Include="..\InfraDesk.Core\InfraDesk.Core.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\InfraDesk.Application\InfraDesk.Application.csproj" />
+		<ProjectReference Include="..\InfraDesk.Core\InfraDesk.Core.csproj" />
+	</ItemGroup>
+
 </Project>
