@@ -38,6 +38,12 @@ High Contrast Mode: Barrierefreiheit nach WCAG-Standards.
 
 Live-Theme-Engine: Sofortige Anwendung von Farb- und Typografie-Änderungen im gesamten System.
 
+![InfraDesk Login](images/InfraDesk.Login.png)
+
+![InfraDesk Dashboard](images/InfraDesk.Dashboard.png)
+
+Mehr Screenshots im images Ordner. 
+
 ## 🏗️ Architektur (Clean Architecture)
 
 ```text
