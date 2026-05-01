@@ -1,13 +1,272 @@
-﻿@page "/tickets"
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Tickets.razor *@
+@page "/tickets"
+@using InfraDesk.Core.Entities
 @using MudBlazor
+@using InfraDesk.UI.Web.Services
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ThemeService ThemeService
+@inject ISnackbar Snackbar
 
-@* FIX: Statischer Titel für das Dashboard *@
-<PageTitle>InfraDesk - Tickets</PageTitle>
+<PageTitle>InfraDesk - Ticket-Queue</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Ticket-Queue</MudText>
+<style>
+    .pdq-container { background-color: #fff; height: calc(100vh - 100px); display: flex; flex-direction: row; }
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 20px; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 8px; margin-top: 16px; }
+    
+    .status-badge { font-weight: 800; font-size: 0.75rem; }
+    .status-offen { color: #2E7D32; }
+    .status-beantwortet { color: #1976D2; }
+    .status-warten { color: #E65100; }
+    .status-aktiv { color: #C62828; }
+</style>
 
-<MudPaper Class="pa-8 d-flex flex-column align-center justify-center" Elevation="2" Style="min-height: 400px;">
-    <MudIcon Icon="@Icons.Material.Filled.Construction" Size="Size.Large" Color="Color.Warning" Class="mb-4" Style="font-size: 4rem;" />
-    <MudText Typo="Typo.h5" Class="mb-2">Under Construction</MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary">Das Ticketing-Modul wird in Kürze implementiert.</MudText>
-</MudPaper>
+<div class="pdq-toolbar">
+    <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+    <MudText Typo="Typo.body2" Class="font-weight-bold">Service-Desk: @(_activeFilter ?? "Alle Tickets")</MudText>
+    <MudSpacer />
+    
+    <!-- MERGE BUTTON: Erscheint nur, wenn mehr als 1 Ticket ausgewählt wurde -->
+    @if (_selectedItems != null && _selectedItems.Count > 1)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="text-transform:none; margin-right: 16px;" OnClick="@(() => _mergeDialogVisible = true)">
+            Zusammenführen (@_selectedItems.Count)
+        </MudButton>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Style="text-transform:none" OnClick="@(() => Nav.NavigateTo("/tickets/create"))">Neues Ticket</MudButton>
+</div>
+
+<div class="pdq-container">
+    <div class="pdq-sidebar">
+        <MudNavMenu Margin="Margin.Dense" Rounded="false">
+            <div class="pdq-section-header" style="margin-top: 0; border-top: none;">Ansichten</div>
+            <MudNavLink OnClick="@(() => SetFilter(null))" Class="@(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.List">Alle Tickets</MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Meins"))" Class="@(_activeFilter == "Meins" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Person">Meine Tickets</MudNavLink>
+
+            <div class="pdq-section-header">Status Filter</div>
+            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Success">Offen</MudNavLink>
+            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Info">In Bearbeitung</MudNavLink>
+        </MudNavMenu>
+    </div>
+
+    <div class="pdq-content">
+        @if (_tickets == null) {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        } else {
+            <!-- MultiSelection ist aktiviert, um Tickets für Merge auszuwählen -->
+            <MudDataGrid T="Ticket" Items="@FilteredTickets" Dense="true" Bordered="true" Hover="true" Elevation="0" 
+                         MultiSelection="true" @bind-SelectedItems="_selectedItems">
+                <ToolBarContent>
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suche..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0" />
+                </ToolBarContent>
+                <Columns>
+                    <SelectColumn T="Ticket" />
+                    
+                    <TemplateColumn Title="ITIL Typ" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Icon="@GetItilIcon(context.Item.Category1)" Color="@GetItilColor(context.Item.Category1)" Variant="Variant.Outlined" Class="font-weight-bold ma-0">
+                                @(context.Item.Category1 ?? "N/A")
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    
+                    <TemplateColumn Title="Status" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                        <CellTemplate>
+                            <span class="status-badge @GetStatusClass(context.Item.Status)">@context.Item.Status.ToUpper()</span>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    
+                    <!-- MASTER-TICKET INDIKATOR -->
+                    <TemplateColumn Title="#" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                        <CellTemplate>
+                            <div class="d-flex align-center">
+                                @if (context.Item.ChildTickets != null && context.Item.ChildTickets.Any())
+                                {
+                                    <MudTooltip Text="Master-Ticket (enthält verknüpfte Sub-Tickets)">
+                                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Color="Color.Primary" Class="mr-2" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.MasterTicketId.HasValue)
+                                {
+                                    <MudTooltip Text="Sub-Ticket">
+                                        <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                                    </MudTooltip>
+                                }
+                                <MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default" Underline="Underline.None" Class="font-weight-bold">
+                                    @context.Item.TicketNumber
+                                </MudLink>
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    
+                    <TemplateColumn Title="Erstellt am" Sortable="true" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                        <CellTemplate>
+                            @ThemeService.FormatDate(context.Item.CreatedAt, "dd.MM.yyyy HH:mm")
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn Title="Kurzbeschreibung">
+                        <CellTemplate>
+                            <MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default" Underline="Underline.Hover">
+                                @context.Item.Title
+                            </MudLink>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    
+                    <TemplateColumn Title="Kontakt" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                        <CellTemplate>
+                            @($"{context.Item.Requester?.LastName}, {context.Item.Requester?.FirstName}")
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        }
+    </div>
+</div>
+
+<!-- DYNAMISCHER MERGE DIALOG -->
+<MudDialog @bind-Visible="_mergeDialogVisible" Options="new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.CallMerge" Class="mr-2" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6">Tickets zusammenführen</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Class="mb-4">Wählen Sie das primäre Master-Ticket aus. Alle anderen gewählten Tickets werden als Sub-Tickets in dieses eingegliedert.</MudAlert>
+        <MudSelect T="Ticket" Label="Ziel (Master-Ticket)" @bind-Value="_selectedMasterForMerge" ToStringFunc="@(t => t == null ? "" : $"#{t.TicketNumber} - {t.Title}")" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+            @if (_selectedItems != null)
+            {
+                foreach (var t in _selectedItems)
+                {
+                    <MudSelectItem Value="@t" />
+                }
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _mergeDialogVisible = false)">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ExecuteMerge" Disabled="@(_selectedMasterForMerge == null || _isMerging)">
+            @if (_isMerging) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> } Zusammenführen
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Ticket>? _tickets;
+    private string _searchString = "";
+    private string? _activeFilter = null;
+    
+    // Merge Funktionalität
+    private HashSet<Ticket> _selectedItems = new();
+    private bool _mergeDialogVisible = false;
+    private Ticket? _selectedMasterForMerge;
+    private bool _isMerging = false;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new() 
+    { 
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private IEnumerable<Ticket> FilteredTickets => _tickets?
+        .Where(x => string.IsNullOrWhiteSpace(_searchString) || 
+                   (x.Title?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) || 
+                   x.TicketNumber.ToString().Contains(_searchString)) ?? Enumerable.Empty<Ticket>();
+
+    protected override async Task OnInitializedAsync() {
+        try { 
+            _tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets"); 
+        }
+        catch { _tickets = new(); }
+    }
+
+    private void SetFilter(string? filter) => _activeFilter = filter;
+
+    // Führt die gewählten Tickets zusammen
+    private async Task ExecuteMerge()
+    {
+        if (_selectedMasterForMerge == null) return;
+        
+        _isMerging = true;
+        
+        try 
+        {
+            // Iteriere über alle gewählten Tickets, außer dem neuen Master
+            var children = _selectedItems.Where(t => t.Id != _selectedMasterForMerge.Id).ToList();
+
+            foreach (var childOverview in children)
+            {
+                // Volles Ticket inkl. Historie laden
+                var fullChild = await Http.GetFromJsonAsync<Ticket>($"api/tickets/{childOverview.Id}");
+                if (fullChild != null)
+                {
+                    fullChild.MasterTicketId = _selectedMasterForMerge.Id;
+                    
+                    // Audit-Trail Kommentar hinzufügen
+                    fullChild.Activities ??= new List<TicketActivity>();
+                    fullChild.Activities.Add(new TicketActivity {
+                        Id = Guid.NewGuid(),
+                        TicketId = fullChild.Id,
+                        AuthorName = "System",
+                        Content = $"Dieses Ticket wurde administrativ mit dem Master-Ticket <a href='/tickets/{_selectedMasterForMerge.Id}'>#{_selectedMasterForMerge.TicketNumber}</a> verknüpft.",
+                        Type = "System",
+                        IsPublic = true
+                    });
+
+                    // Speichern an die API
+                    await Http.PutAsJsonAsync($"api/tickets/{fullChild.Id}", fullChild, _jsonOptions);
+                }
+            }
+            
+            Snackbar.Add($"Erfolgreich! {children.Count} Tickets wurden zusammengeführt.", Severity.Success);
+            
+            _mergeDialogVisible = false;
+            _selectedItems.Clear();
+            _selectedMasterForMerge = null;
+            
+            // Liste aktualisieren, um das Master-Icon sofort zu sehen
+            await OnInitializedAsync(); 
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Fehler beim Zusammenführen: {ex.Message}", Severity.Error);
+        }
+        finally 
+        {
+            _isMerging = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetStatusClass(string status) => (status ?? "").ToLower() switch {
+        "offen" => "status-offen",
+        "beantwortet" => "status-beantwortet",
+        "warten auf antwort" => "status-warten",
+        "aktiv" => "status-aktiv",
+        _ => ""
+    };
+
+    private string GetItilIcon(string? category) => category switch {
+        "Incident (Störung)" => Icons.Material.Filled.Bolt,
+        "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart,
+        "Change (Änderung)" => Icons.Material.Filled.Settings,
+        "Problem (Problem)" => Icons.Material.Filled.Search,
+        _ => Icons.Material.Filled.Label
+    };
+
+    private Color GetItilColor(string? category) => category switch {
+        "Incident (Störung)" => Color.Error,     
+        "Service Request (Serviceanfrage)" => Color.Info, 
+        "Change (Änderung)" => Color.Warning,    
+        "Problem (Problem)" => Color.Dark,       
+        _ => Color.Default
+    };
+}

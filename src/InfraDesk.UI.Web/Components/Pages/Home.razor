@@ -3,13 +3,14 @@
 @using InfraDesk.Core.Entities
 @using MudBlazor
 @using System.Net.Http.Json
+@using InfraDesk.UI.Web.Services
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject ThemeService ThemeService
 
 <PageTitle>InfraDesk - Dashboard</PageTitle>
 
-@* Wir nutzen hier MudContainer mit MaxWidth, um die Kacheln nicht an den Rand zu quetschen *@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8 px-8">
     
     <div class="d-flex align-center mb-8">
@@ -65,7 +66,7 @@
                 </MudPaper>
             </MudItem>
 
-            @* Unterer Bereich: Letzte Aktivitäten (Beispiel für echtes Feedback) *@
+            @* Letzte Aktivitäten *@
             <MudItem xs="12" md="8">
                 <MudPaper Class="pa-6" Elevation="2" Style="border-radius: 16px;">
                     <MudText Typo="Typo.h6" Class="mb-4 font-weight-bold">Letzte Ticket-Ereignisse</MudText>
@@ -77,7 +78,8 @@
                                 <MudListItem Icon="@Icons.Material.Filled.FiberManualRecord" IconColor="@(ticket.Priority == "High" ? Color.Error : Color.Info)">
                                     <div class="d-flex justify-space-between w-100">
                                         <MudText Typo="Typo.body2"><strong>@ticket.Title</strong> - @ticket.Status</MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@ticket.CreatedAt.ToShortDateString()</MudText>
+                                        @* FIX: Lokalzeit-Formatierung *@
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@ThemeService.FormatDate(ticket.CreatedAt, "dd.MM.yyyy HH:mm")</MudText>
                                     </div>
                                 </MudListItem>
                                 <MudDivider />
@@ -117,11 +119,9 @@
         _isLoading = true;
         try
         {
-            // 1. Assets zählen
             var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
             _assetsCount = assets?.Count ?? 0;
 
-            // 2. Tickets laden und filtern
             var tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets");
             if (tickets != null)
             {
@@ -129,11 +129,10 @@
                 _openTicketsCount = tickets.Count(t => t.Status != "Closed");
             }
 
-            // 3. Standorte zählen
             var locations = await Http.GetFromJsonAsync<List<Location>>("api/locations");
             _locationsCount = locations?.Count ?? 0;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add("Daten konnten nicht vollständig geladen werden.", Severity.Warning);
         }

@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-InfraDesk.Worker-70513c1d-9a9f-4137-84c9-b94f0376eeb6</UserSecretsId>
+    <AssemblyVersion>2026.5.1.1</AssemblyVersion>
+    <FileVersion>2026.5.1.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

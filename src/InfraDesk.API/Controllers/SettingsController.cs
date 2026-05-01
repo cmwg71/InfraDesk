@@ -55,7 +55,6 @@ public class SettingsController : ControllerBase
         return Ok();
     }
 
-    // --- STAMMDATEN & UNTERNEHMENSPROFIL ---
     [HttpGet("masterdata")]
     public async Task<ActionResult<MasterDataDto>> GetMasterData()
     {
@@ -69,7 +68,11 @@ public class SettingsController : ControllerBase
         }
 
         var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
-        dto.CompanyPrefix = prefixSetting?.Value ?? ""; // Kein Fallback mehr! Muss vom Nutzer gesetzt werden.
+        dto.CompanyPrefix = prefixSetting?.Value ?? "";
+
+        // Zeitzone laden
+        var tzSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "SystemTimeZone");
+        dto.TimeZoneId = tzSetting?.Value ?? "W. Europe Standard Time";
 
         var addressSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "HQAddress");
         if (addressSetting != null && !string.IsNullOrWhiteSpace(addressSetting.Value))
@@ -92,7 +95,6 @@ public class SettingsController : ControllerBase
     [HttpPost("masterdata")]
     public async Task<ActionResult> SaveMasterData([FromBody] MasterDataDto dto)
     {
-        // Strikte Validierung der Pflichtfelder
         if (string.IsNullOrWhiteSpace(dto.CompanyName) || string.IsNullOrWhiteSpace(dto.CompanyPrefix) || string.IsNullOrWhiteSpace(dto.ZipCity))
         {
             return BadRequest("Firmenname, Kürzel und PLZ/Ort sind Pflichtfelder.");
@@ -109,6 +111,11 @@ public class SettingsController : ControllerBase
             tenant.Name = dto.CompanyName;
             tenant.Domain = dto.Domain;
         }
+
+        // Zeitzone speichern
+        var tzSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "SystemTimeZone");
+        if (tzSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "SystemTimeZone", Value = dto.TimeZoneId });
+        else tzSetting.Value = dto.TimeZoneId;
 
         string cleanPrefix = dto.CompanyPrefix.Substring(0, Math.Min(3, dto.CompanyPrefix.Length)).ToUpper();
         var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
@@ -150,6 +157,12 @@ public class SettingsController : ControllerBase
             FormatInfo = "{Company(3)} - {Standort(3)} - {Kategorie(3)} - {Zähler(5)}"
         });
     }
+
+    [HttpGet("timezones")]
+    public ActionResult<IEnumerable<string>> GetTimeZones()
+    {
+        return Ok(TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(id => id).ToList());
+    }
 }
 
 public class MasterDataDto
@@ -161,8 +174,8 @@ public class MasterDataDto
     public string State { get; set; } = "";
     public string ZipCity { get; set; } = "";
     public string Street { get; set; } = "";
+    public string TimeZoneId { get; set; } = "W. Europe Standard Time";
 
-    // Diese Property erlaubt dem Frontend (MainLayout) in Echtzeit zu prüfen, ob die Einrichtung abgeschlossen ist
     public bool IsSetupComplete => !string.IsNullOrWhiteSpace(CompanyName)
                                 && !string.IsNullOrWhiteSpace(CompanyPrefix)
                                 && !string.IsNullOrWhiteSpace(ZipCity);

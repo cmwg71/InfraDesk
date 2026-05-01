@@ -1,0 +1,434 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/TicketCreate.razor *@
+@page "/tickets/create"
+@page "/tickets/edit/{Id:guid}"
+@using InfraDesk.Core.Entities
+@using MudBlazor
+@using System.Text.Json
+@using System.IO
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<PageTitle>InfraDesk - @(IsEditMode ? "Asset bearbeiten" : "Neues Ticket anlegen")</PageTitle>
+
+<style>
+    /* PDQ Inventory Style: High Density Layout */
+    .pdq-container { background-color: #fff; height: calc(100vh - 150px); display: flex; flex-direction: row; border: 1px solid #ccc; border-radius: 0 0 4px 4px; border-top: none; overflow: hidden; }
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 24px; }
+    
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 16px; margin-top: 24px; }
+    .pdq-section-header:first-child { margin-top: 0; border-top: none; }
+    
+    .pdq-toolbar { height: 48px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px 4px 0 0; display: flex; align-items: center; padding: 0 16px; margin-top: 24px; }
+    
+    /* Wizard Step Styles in Sidebar */
+    .wizard-step { padding: 12px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; transition: background-color 0.2s; cursor: pointer; }
+    .wizard-step.active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
+    .wizard-step.completed { color: var(--mud-palette-success); }
+    .wizard-step:hover { background-color: #e6e6e6; }
+</style>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-8">
+
+    <div class="pdq-toolbar">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/tickets"))" Size="Size.Small" Class="mr-2" />
+        <MudIcon Icon="@Icons.Material.Filled.AddComment" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+        <MudText Typo="Typo.body2" Class="font-weight-bold">Neues Ticket anlegen</MudText>
+        
+        <MudSpacer />
+        
+        <MudButton Disabled="@(_currentStepIndex == 0)" OnClick="PrevStep" Variant="Variant.Outlined" Size="Size.Small" Class="mr-2" Style="background-color: white;">Zurück</MudButton>
+        @if (_currentStepIndex < ActiveSteps.Count - 1)
+        {
+            <MudButton OnClick="NextStep" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Disabled="@(!CanProceed())">Weiter</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="SubmitTicket" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" Disabled="@(!CanProceed() || _isSaving)">
+                @if (_isSaving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> }
+                Ticket speichern
+            </MudButton>
+        }
+    </div>
+
+    <div class="pdq-container">
+        
+        <div class="pdq-sidebar">
+            <div class="pdq-section-header" style="margin-bottom: 0;">Erstellungsprozess</div>
+            
+            @for (int i = 0; i < ActiveSteps.Count; i++)
+            {
+                int index = i;
+                var step = ActiveSteps[index];
+                bool isActive = index == _currentStepIndex;
+                bool isCompleted = index < _currentStepIndex;
+
+                <div class="wizard-step @(isActive ? "active" : "") @(isCompleted ? "completed" : "")" @onclick="@(() => JumpToStep(index))">
+                    <MudIcon Icon="@(isCompleted ? Icons.Material.Filled.CheckCircle : step.Icon)" Size="Size.Small" Class="mr-3" />
+                    <span style="font-size: 0.85rem;">@step.Name</span>
+                </div>
+            }
+        </div>
+
+        <div class="pdq-content">
+            @if (_isLoading)
+            {
+                <div class="d-flex justify-center align-center" style="height: 100%;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            }
+            else
+            {
+                var currentStepDef = ActiveSteps[_currentStepIndex];
+
+                @if (currentStepDef.Id == "Basics")
+                {
+                    <div class="pdq-section-header">1. Problembeschreibung</div>
+                    
+                    <MudGrid Spacing="2" Class="mb-6">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_newTicket.Title" Label="Kurzbeschreibung (Betreff) *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" AutoFocus="true" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">
+                                <MudIcon Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                                Sie können Screenshots direkt mit Strg+V einfügen oder Dateien anhängen.
+                            </MudText>
+                            
+                            <div id="ticket-desc-wrapper">
+                                <MudTextField @bind-Value="_newTicket.Description" 
+                                              Label="Beschreibung *" 
+                                              Placeholder="Bitte beschreiben Sie das Problem oder Ihre Anfrage hier so detailliert wie möglich..." 
+                                              Variant="Variant.Outlined" 
+                                              Margin="Margin.Dense" 
+                                              Required="true" 
+                                              Lines="10" />
+                            </div>
+                            
+                            <!-- NEU: FILE UPLOAD -->
+                            <div class="mt-2">
+                                <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadFiles" MaximumFileCount="10">
+                                    <ActivatorContent>
+                                        <MudButton StartIcon="@Icons.Material.Filled.AttachFile" Variant="Variant.Outlined" Size="Size.Small">Dateien anhängen (PDF, Bilder...)</MudButton>
+                                    </ActivatorContent>
+                                </MudFileUpload>
+                            </div>
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="pdq-section-header">Kontakt & Mandant</div>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Guid?" Label="Gemeldet von (Kontakt) *" @bind-Value="_newTicket.RequesterId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
+                                @foreach (var p in _availablePersons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Guid" Label="Mandant *" @bind-Value="_newTicket.TenantId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
+                                @foreach (var t in _tenants) { <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                }
+
+                @if (currentStepDef.Id == "Classification")
+                {
+                    <div class="pdq-section-header">2. ITIL Kategorisierung</div>
+                    
+                    <MudGrid Spacing="2" Class="mb-6">
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="string" Label="Ticket-Typ (ITIL) *" @bind-Value="_newTicket.Category1" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
+                                <MudSelectItem Value="@("Incident (Störung)")"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Small" Color="Color.Error" Class="mr-2"/>Incident (Störung)</div></MudSelectItem>
+                                <MudSelectItem Value="@("Service Request (Serviceanfrage)")"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Small" Color="Color.Info" Class="mr-2"/>Service Request</div></MudSelectItem>
+                                <MudSelectItem Value="@("Problem (Problem)")"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" Color="Color.Dark" Class="mr-2"/>Problem</div></MudSelectItem>
+                                <MudSelectItem Value="@("Change (Änderung)")"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Color="Color.Warning" Class="mr-2"/>Change</div></MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="string" Label="Priorität *" @bind-Value="_newTicket.Priority" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
+                                <MudSelectItem Value="@("Niedrig")">Niedrig</MudSelectItem>
+                                <MudSelectItem Value="@("Normal")">Normal</MudSelectItem>
+                                <MudSelectItem Value="@("Hoch")">Hoch</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="string" Label="Asset-Kategorie" @bind-Value="_newTicket.Category2" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                                @foreach(var type in _dynamicAssetTypes) { <MudSelectItem Value="@type.Name">@type.Name</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_newTicket.Category3" Label="Subkategorie (z.B. Softwarename)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="pdq-section-header">Optionale Metadaten</div>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudTextField T="string" @bind-Value="_newTicket.Tags" Label="Schlagworte (Tags)" Placeholder="Hardware, Netzwerk, VIP" HelperText="Komma-getrennt eingeben" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudCheckBox T="bool" @bind-Value="_newTicket.IsInternal" Label="Internes Ticket (Nur für Techniker sichtbar)" Color="Color.Primary" Dense="true" />
+                        </MudItem>
+                    </MudGrid>
+                }
+
+                @if (currentStepDef.Id == "Assets")
+                {
+                    <div class="pdq-section-header">3. Betroffene Hardware / Assets verknüpfen</div>
+                    <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Suchen Sie nach betroffenen Geräten und fügen Sie diese dem Ticket hinzu.</MudText>
+                    
+                    <MudAutocomplete T="Asset" Label="Asset suchen & anfügen..." ValueChanged="AddAsset" 
+                                     SearchFunc="SearchAssets" ToStringFunc="@(a => a == null ? null : $"{a.Name} ({a.AssetTag})")" 
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" 
+                                     ResetValueOnEmptyText="true" CoerceText="false" CoerceValue="false" Class="mb-6" />
+
+                    @if (_newTicket.AssignedAssets != null && _newTicket.AssignedAssets.Any())
+                    {
+                        <div class="pdq-section-header">Zugewiesene Assets</div>
+                        <MudDataGrid Items="@_newTicket.AssignedAssets" Dense="true" Bordered="true" Elevation="0">
+                            <Columns>
+                                <PropertyColumn Property="x => x.AssetTag" Title="Tag" />
+                                <PropertyColumn Property="x => x.Name" Title="Name" />
+                                <TemplateColumn Title="Aktion" CellClass="d-flex justify-end">
+                                    <CellTemplate>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveAsset(context.Item))" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                        </MudDataGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">Bislang wurden keine Assets verknüpft.</MudAlert>
+                    }
+                }
+            }
+        </div>
+    </div>
+</MudContainer>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private bool IsEditMode => Id.HasValue;
+
+    public class WizardStep { public string Id {get;set;}=""; public string Name {get;set;}=""; public string Icon {get;set;}=""; }
+    private List<WizardStep> ActiveSteps = new();
+    private int _currentStepIndex = 0;
+    
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    
+    private DotNetObjectReference<TicketCreate>? _objRef;
+
+    private Ticket _newTicket = new() { 
+        Title = "", 
+        Description = "",
+        Status = "OFFEN", 
+        Priority = "Normal",
+        Category1 = "Incident (Störung)",
+        AssignedAssets = new List<Asset>()
+    };
+    
+    private List<Person> _availablePersons = new();
+    private List<Tenant> _tenants = new();
+    private List<AssetType> _dynamicAssetTypes = new();
+    private List<Asset> _allAssets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            try { _availablePersons = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch {}
+            try { _tenants = await Http.GetFromJsonAsync<List<Tenant>>("api/tenants") ?? new(); } catch {}
+            try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch {}
+            try { _allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new(); } catch {}
+
+            if (_tenants.Any() && _newTicket.TenantId == Guid.Empty)
+            {
+                _newTicket.TenantId = _tenants.First().Id;
+            }
+
+            RebuildSteps();
+        }
+        finally { _isLoading = false; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var jsCode = @"
+                window.attachImagePasteListener = function(wrapperId, dotNetRef) {
+                    var wrapper = document.getElementById(wrapperId);
+                    if(!wrapper) return;
+                    
+                    var el = wrapper.querySelector('textarea') || wrapper.querySelector('input');
+                    if(el && !el.dataset.pasteAttached) {
+                        el.dataset.pasteAttached = 'true';
+                        
+                        el.addEventListener('paste', function(e) {
+                            var clipboardData = e.clipboardData || window.clipboardData;
+                            if (!clipboardData) return;
+                            
+                            var items = clipboardData.items;
+                            for (var i = 0; i < items.length; i++) {
+                                if (items[i].type.indexOf('image') !== -1) {
+                                    e.preventDefault(); 
+                                    
+                                    var blob = items[i].getAsFile();
+                                    var reader = new FileReader();
+                                    reader.onload = function(event) {
+                                        dotNetRef.invokeMethodAsync('HandleImagePasted', event.target.result);
+                                    };
+                                    reader.readAsDataURL(blob);
+                                    break; 
+                                }
+                            }
+                        });
+                    }
+                };
+            ";
+            
+            await JSRuntime.InvokeVoidAsync("eval", jsCode);
+            _objRef = DotNetObjectReference.Create(this);
+        }
+
+        if (!_isLoading && ActiveSteps.Count > 0 && ActiveSteps[_currentStepIndex].Id == "Basics")
+        {
+            await JSRuntime.InvokeVoidAsync("attachImagePasteListener", "ticket-desc-wrapper", _objRef);
+        }
+    }
+
+    [JSInvokable]
+    public void HandleImagePasted(string base64Image)
+    {
+        string imgTag = $"\n<br/><img src=\"{base64Image}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
+        _newTicket.Description += imgTag;
+        
+        Snackbar.Add("Bild erfolgreich aus der Zwischenablage eingefügt.", Severity.Success);
+        StateHasChanged();
+    }
+
+    // NEU: Logik zum Verarbeiten hochgeladener Dateien
+    private async Task UploadFiles(IReadOnlyList<IBrowserFile> files)
+    {
+        foreach (var file in files)
+        {
+            try
+            {
+                var maxAllowedSize = 10 * 1024 * 1024; // 10 MB pro Datei Limit
+                using var stream = file.OpenReadStream(maxAllowedSize);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                var mimeType = file.ContentType;
+                
+                if (mimeType.StartsWith("image/"))
+                {
+                    _newTicket.Description += $"\n<br/><img src=\"data:{mimeType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
+                }
+                else
+                {
+                    _newTicket.Description += $"\n<br/><a href=\"data:{mimeType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>\n";
+                }
+                
+                Snackbar.Add($"{file.Name} erfolgreich angehängt.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Fehler bei {file.Name}: {ex.Message}", Severity.Error);
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void RebuildSteps()
+    {
+        ActiveSteps.Clear();
+        ActiveSteps.Add(new WizardStep { Id = "Basics", Name = "Problem", Icon = Icons.Material.Filled.Description });
+        ActiveSteps.Add(new WizardStep { Id = "Classification", Name = "Klassifizierung", Icon = Icons.Material.Filled.Category });
+        ActiveSteps.Add(new WizardStep { Id = "Assets", Name = "Assets", Icon = Icons.Material.Filled.Computer });
+        StateHasChanged();
+    }
+
+    private void NextStep() { if (_currentStepIndex < ActiveSteps.Count - 1) _currentStepIndex++; }
+    private void PrevStep() { if (_currentStepIndex > 0) _currentStepIndex--; }
+    private void JumpToStep(int index) { if (index <= _currentStepIndex || CanProceed()) _currentStepIndex = index; }
+
+    private bool CanProceed()
+    {
+        if (ActiveSteps == null || ActiveSteps.Count == 0 || _currentStepIndex < 0) return false;
+
+        if (ActiveSteps[_currentStepIndex].Id == "Basics") 
+        {
+            return !string.IsNullOrWhiteSpace(_newTicket.Title) 
+                && !string.IsNullOrWhiteSpace(_newTicket.Description)
+                && _newTicket.RequesterId.HasValue
+                && _newTicket.TenantId != Guid.Empty;
+        }
+        if (ActiveSteps[_currentStepIndex].Id == "Classification") 
+        {
+            return !string.IsNullOrWhiteSpace(_newTicket.Category1) && !string.IsNullOrWhiteSpace(_newTicket.Priority);
+        }
+        
+        return true; 
+    }
+
+    private Task<IEnumerable<Asset>> SearchAssets(string value, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(value)) return Task.FromResult(_allAssets.Take(10));
+        return Task.FromResult(_allAssets.Where(a => 
+            (a.Name?.Contains(value, StringComparison.OrdinalIgnoreCase) == true) || 
+            (a.AssetTag?.Contains(value, StringComparison.OrdinalIgnoreCase) == true)
+        ).Take(10));
+    }
+
+    private void AddAsset(Asset? a) { 
+        if (a != null) {
+            _newTicket.AssignedAssets ??= new List<Asset>();
+            if (!_newTicket.AssignedAssets.Any(x => x.Id == a.Id)) {
+                _newTicket.AssignedAssets.Add(a);
+            }
+        }
+    }
+
+    private void RemoveAsset(Asset a) { _newTicket.AssignedAssets?.Remove(a); }
+
+    private async Task SubmitTicket()
+    {
+        if (!CanProceed()) return;
+
+        _isSaving = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/tickets", _newTicket);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var created = await response.Content.ReadFromJsonAsync<Ticket>();
+                Snackbar.Add("Ticket erfolgreich erstellt!", Severity.Success);
+                Nav.NavigateTo(created != null ? $"/tickets/{created.Id}" : "/tickets");
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Fehler: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex) 
+        { 
+            Snackbar.Add($"API Fehler: {ex.Message}", Severity.Error); 
+        }
+        finally 
+        { 
+            _isSaving = false; 
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _objRef?.Dispose();
+    }
+}
