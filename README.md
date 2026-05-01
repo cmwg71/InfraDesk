@@ -54,7 +54,7 @@ InfraDesk folgt strikt dem Schichtenmodell, um Wartbarkeit und Testbarkeit zu ga
     ├── InfraDesk.API: Zentrale REST-Schnittstelle für den Discovery-Worker und externe Integrationen.
     |
     └── InfraDesk.Worker: Hintergrunddienst zur agentlosen Erfassung (WMI, DNS, Ping).
-```text
+```
 
 ### 🛠️ Technologiestack
 
