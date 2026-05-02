@@ -23,7 +23,7 @@ public class TicketsController : ControllerBase
         return await _context.Tickets
             .Include(t => t.Requester)
             .Include(t => t.Supporter)
-            .Include(t => t.ChildTickets) // WICHTIG: Erforderlich für das Master-Icon in der Liste!
+            .Include(t => t.ChildTickets)
             .OrderByDescending(t => t.TicketNumber)
             .AsSplitQuery()
             .ToListAsync();
@@ -36,15 +36,42 @@ public class TicketsController : ControllerBase
             .Include(t => t.Requester)
             .Include(t => t.Supporter)
             .Include(t => t.Approver)
-            .Include(t => t.AssignedAssets)
-            .Include(t => t.Activities)
             .Include(t => t.Watchers)
-            .Include(t => t.ChildTickets) // Lade Sub-Tickets
-            .AsSplitQuery() // Behebt die EF Core Warnung bei mehreren Listen-Includes
+            .Include(t => t.AssignedAssets)
+            .Include(t => t.ChildTickets)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (ticket == null) return NotFound();
+
+        ticket.Activities = await _context.TicketActivities
+            .Where(a => a.TicketId == id)
+            .OrderBy(a => a.Timestamp)
+            .ToListAsync();
+
         return ticket;
+    }
+
+    // NEU: Liefert die neusten echten Journal-Einträge für das Dashboard
+    [HttpGet("recent-activities")]
+    public async Task<ActionResult<IEnumerable<object>>> GetRecentActivities()
+    {
+        var activities = await _context.TicketActivities
+            .OrderByDescending(a => a.Timestamp)
+            .Where(a => a.IsPublic) // Nur öffentliche/sichtbare für das Dashboard
+            .Take(15)
+            .Join(_context.Tickets, a => a.TicketId, t => t.Id, (a, t) => new {
+                TicketId = a.TicketId,
+                TicketNumber = t.TicketNumber,
+                TicketTitle = t.Title,
+                AuthorName = a.AuthorName,
+                Content = a.Content,
+                Timestamp = a.Timestamp,
+                Type = a.Type
+            })
+            .ToListAsync();
+
+        return Ok(activities);
     }
 
     [HttpPost]
@@ -53,32 +80,28 @@ public class TicketsController : ControllerBase
         var tenant = await _context.Tenants.FirstOrDefaultAsync();
         if (tenant == null) return BadRequest("Kein aktiver Mandant gefunden.");
 
+        ticket.TenantId = tenant.Id;
         if (ticket.Id == Guid.Empty) ticket.Id = Guid.NewGuid();
-        if (ticket.TenantId == Guid.Empty) ticket.TenantId = tenant.Id;
 
-        // Automatische, fortlaufende Ticketnummer generieren
-        long maxNumber = await _context.Tickets.MaxAsync(t => (long?)t.TicketNumber) ?? 500;
-        ticket.TicketNumber = maxNumber + 1;
+        var maxTicketNumber = await _context.Tickets.MaxAsync(t => (long?)t.TicketNumber) ?? 1000;
+        ticket.TicketNumber = maxTicketNumber + 1;
         ticket.CreatedAt = DateTime.UtcNow;
 
-        // Skalare Navigation-Properties nullen, um Tracking-Probleme beim Insert zu vermeiden
+        // Beziehungen entkoppeln, um PK-Konflikte zu vermeiden
         ticket.Requester = null;
         ticket.Supporter = null;
         ticket.Approver = null;
 
-        // Verknüpfte Assets sauber an den Context hängen
-        if (ticket.AssignedAssets != null && ticket.AssignedAssets.Any())
+        var assignedAssets = new List<Asset>();
+        if (ticket.AssignedAssets != null)
         {
-            var assetIds = ticket.AssignedAssets.Select(a => a.Id).ToList();
-            ticket.AssignedAssets = await _context.Assets.Where(a => assetIds.Contains(a.Id)).ToListAsync();
+            foreach (var a in ticket.AssignedAssets)
+            {
+                var trackedAsset = await _context.Assets.FindAsync(a.Id);
+                if (trackedAsset != null) assignedAssets.Add(trackedAsset);
+            }
         }
-
-        // Watchers sauber an den Context hängen
-        if (ticket.Watchers != null && ticket.Watchers.Any())
-        {
-            var watcherIds = ticket.Watchers.Select(w => w.Id).ToList();
-            ticket.Watchers = await _context.Persons.Where(p => watcherIds.Contains(p.Id)).ToListAsync();
-        }
+        ticket.AssignedAssets = assignedAssets;
 
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
@@ -89,97 +112,78 @@ public class TicketsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> PutTicket(Guid id, Ticket ticket)
     {
-        if (id != ticket.Id) return BadRequest("ID Mismatch");
+        if (id != ticket.Id) return BadRequest();
 
-        // Ticket laden OHNE Activities! Verhindert Concurrency Errors.
         var existingTicket = await _context.Tickets
             .Include(t => t.Watchers)
             .Include(t => t.AssignedAssets)
-            .Include(t => t.ChildTickets)
             .FirstOrDefaultAsync(t => t.Id == id);
 
-        if (existingTicket == null) return NotFound("Ticket nicht gefunden");
+        if (existingTicket == null) return NotFound();
 
-        string oldStatus = existingTicket.Status;
+        // Stammdaten aktualisieren
+        existingTicket.Title = ticket.Title;
+        existingTicket.Description = ticket.Description;
+        existingTicket.Status = ticket.Status;
+        existingTicket.Priority = ticket.Priority;
+        existingTicket.Category1 = ticket.Category1;
+        existingTicket.Category2 = ticket.Category2;
+        existingTicket.Category3 = ticket.Category3;
+        existingTicket.Tags = ticket.Tags;
+        existingTicket.RequesterId = ticket.RequesterId;
+        existingTicket.SupporterId = ticket.SupporterId;
+        existingTicket.ApproverId = ticket.ApproverId;
+        existingTicket.ApprovalStatus = ticket.ApprovalStatus;
+        existingTicket.EscalationLevel = ticket.EscalationLevel;
+        existingTicket.SpentMinutes = ticket.SpentMinutes;
+        existingTicket.EstimatedMinutes = ticket.EstimatedMinutes;
+        existingTicket.DueAt = ticket.DueAt;
+        existingTicket.MasterTicketId = ticket.MasterTicketId;
+        existingTicket.IsInternal = ticket.IsInternal;
 
-        _context.Entry(existingTicket).CurrentValues.SetValues(ticket);
-
-        bool statusChanged = oldStatus != existingTicket.Status;
-        var newActivitiesForCascade = new List<TicketActivity>();
-
-        if (ticket.Activities != null && ticket.Activities.Any())
-        {
-            var incomingIds = ticket.Activities.Select(a => a.Id).ToList();
-
-            var existingIds = await _context.TicketActivities
-                .Where(a => incomingIds.Contains(a.Id))
-                .Select(a => a.Id)
-                .ToListAsync();
-
-            var newActivities = ticket.Activities.Where(a => !existingIds.Contains(a.Id)).ToList();
-
-            foreach (var newAct in newActivities)
-            {
-                newAct.TicketId = existingTicket.Id;
-                _context.TicketActivities.Add(newAct);
-                newActivitiesForCascade.Add(newAct);
-            }
-        }
-
-        // --- KASKADIERUNGS-LOGIK FÜR MASTER-TICKET ---
-        if (existingTicket.ChildTickets != null && existingTicket.ChildTickets.Any())
-        {
-            foreach (var child in existingTicket.ChildTickets)
-            {
-                if (statusChanged && (existingTicket.Status == "GESCHLOSSEN" || existingTicket.Status == "AKTIV"))
-                {
-                    child.Status = existingTicket.Status;
-                    _context.TicketActivities.Add(new TicketActivity
-                    {
-                        Id = Guid.NewGuid(),
-                        TicketId = child.Id,
-                        AuthorName = "System",
-                        Content = $"Status wurde automatisch durch das Master-Ticket (#{existingTicket.TicketNumber}) auf '{existingTicket.Status}' gesetzt.",
-                        Type = "System",
-                        IsPublic = true
-                    });
-                }
-
-                foreach (var act in newActivitiesForCascade.Where(a => a.IsPublic && a.Type == "Comment"))
-                {
-                    _context.TicketActivities.Add(new TicketActivity
-                    {
-                        Id = Guid.NewGuid(),
-                        TicketId = child.Id,
-                        AuthorName = act.AuthorName,
-                        Content = $"<strong>[Update via Master-Ticket #{existingTicket.TicketNumber}]</strong><br/>" + act.Content,
-                        Type = "Comment",
-                        IsPublic = true,
-                        IsStaffAction = act.IsStaffAction
-                    });
-                }
-            }
-        }
-
+        // Beziehungen synchronisieren
         existingTicket.Watchers.Clear();
-        if (ticket.Watchers != null && ticket.Watchers.Any())
+        if (ticket.Watchers != null)
         {
-            var watcherIds = ticket.Watchers.Select(w => w.Id).ToList();
-            var persons = await _context.Persons.Where(p => watcherIds.Contains(p.Id)).ToListAsync();
-            foreach (var p in persons) existingTicket.Watchers.Add(p);
+            foreach (var w in ticket.Watchers)
+            {
+                var person = await _context.Persons.FindAsync(w.Id);
+                if (person != null) existingTicket.Watchers.Add(person);
+            }
         }
 
         existingTicket.AssignedAssets.Clear();
-        if (ticket.AssignedAssets != null && ticket.AssignedAssets.Any())
+        if (ticket.AssignedAssets != null)
         {
-            var assetIds = ticket.AssignedAssets.Select(a => a.Id).ToList();
-            var assetsToAssign = await _context.Assets.Where(a => assetIds.Contains(a.Id)).ToListAsync();
-            foreach (var a in assetsToAssign) existingTicket.AssignedAssets.Add(a);
+            foreach (var a in ticket.AssignedAssets)
+            {
+                var asset = await _context.Assets.FindAsync(a.Id);
+                if (asset != null) existingTicket.AssignedAssets.Add(asset);
+            }
         }
 
-        try { await _context.SaveChangesAsync(); }
-        catch (DbUpdateException ex) { return StatusCode(500, $"Datenbankfehler beim Speichern: {ex.InnerException?.Message ?? ex.Message}"); }
+        // NEUE Aktivitäten (Journal) anfügen
+        if (ticket.Activities != null)
+        {
+            foreach (var newAct in ticket.Activities.Where(a => a.Id != Guid.Empty && !_context.TicketActivities.Any(dbA => dbA.Id == a.Id)))
+            {
+                newAct.TicketId = existingTicket.Id;
+                _context.TicketActivities.Add(newAct);
+            }
+        }
 
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteTicket(Guid id)
+    {
+        var ticket = await _context.Tickets.FindAsync(id);
+        if (ticket == null) return NotFound();
+
+        _context.Tickets.Remove(ticket);
+        await _context.SaveChangesAsync();
         return NoContent();
     }
 }

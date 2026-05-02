@@ -12,8 +12,8 @@
 
 <PageTitle>InfraDesk - Login</PageTitle>
 
-<div style="height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f0f2f5;">
-    <MudPaper Elevation="4" Style="width: 100%; max-width: 450px; border-radius: 16px; overflow: hidden;">
+<div style="height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; background-color: #f0f2f5; position: fixed; top: 0; left: 0;">
+    <MudPaper Elevation="4" Style="width: 100%; max-width: 450px; border-radius: 16px; overflow: hidden; margin: 16px;">
         
         <div style="background-color: var(--mud-palette-primary); padding: 32px 24px; text-align: center;">
             <img src="InfraDesk_Logo.png" alt="InfraDesk" style="height: 64px; object-fit: contain; margin-bottom: 16px; filter: brightness(0) invert(1);" />
@@ -65,7 +65,6 @@
                 var result = await response.Content.ReadFromJsonAsync<LoginResult>();
                 if (result != null && result.Success)
                 {
-                    // Korrekter await Aufruf
                     await AuthStateProvider.MarkUserAsAuthenticated(result.Email, result.Role, result.Name, result.AllowedTenants);
                     Nav.NavigateTo("/");
                 }

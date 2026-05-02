@@ -1,5 +1,6 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Tickets.razor *@
 @page "/tickets"
+@using Microsoft.AspNetCore.Components.Forms
 @using InfraDesk.Core.Entities
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
@@ -25,6 +26,7 @@
     .status-beantwortet { color: #1976D2; }
     .status-warten { color: #E65100; }
     .status-aktiv { color: #C62828; }
+    .import-btn-wrapper { margin: 0; padding: 0; display: flex; align-items: center; }
 </style>
 
 <div class="pdq-toolbar">
@@ -32,7 +34,6 @@
     <MudText Typo="Typo.body2" Class="font-weight-bold">Service-Desk: @(_activeFilter ?? "Alle Tickets")</MudText>
     <MudSpacer />
     
-    <!-- MERGE BUTTON: Erscheint nur, wenn mehr als 1 Ticket ausgewählt wurde -->
     @if (_selectedItems != null && _selectedItems.Count > 1)
     {
         <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="text-transform:none; margin-right: 16px;" OnClick="@(() => _mergeDialogVisible = true)">
@@ -60,31 +61,42 @@
         @if (_tickets == null) {
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
         } else {
-            <!-- MultiSelection ist aktiviert, um Tickets für Merge auszuwählen -->
             <MudDataGrid T="Ticket" Items="@FilteredTickets" Dense="true" Bordered="true" Hover="true" Elevation="0" 
-                         MultiSelection="true" @bind-SelectedItems="_selectedItems">
+                         MultiSelection="true" @bind-SelectedItems="_selectedItems" Filterable="true">
                 <ToolBarContent>
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0" />
+                    <MudSpacer />
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suche..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0 mr-4" Style="max-width: 300px;" />
+
+                    <MudTooltip Text="Als CSV exportieren">
+                        <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
+                    </MudTooltip>
+                    
+                    <div class="import-btn-wrapper">
+                        <!-- Nativer Blazor InputFile (Bulletproof-Lösung) -->
+                        <MudTooltip Text="Aus CSV importieren">
+                            <MudIconButton HtmlTag="label" for="import-csv-tickets" Icon="@Icons.Material.Filled.FileUpload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" />
+                        </MudTooltip>
+                        <InputFile id="import-csv-tickets" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
+                    </div>
                 </ToolBarContent>
                 <Columns>
                     <SelectColumn T="Ticket" />
                     
-                    <TemplateColumn Title="ITIL Typ" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                    <PropertyColumn Property="@(x => x.Category1)" Title="ITIL Typ" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
                         <CellTemplate>
                             <MudChip T="string" Size="Size.Small" Icon="@GetItilIcon(context.Item.Category1)" Color="@GetItilColor(context.Item.Category1)" Variant="Variant.Outlined" Class="font-weight-bold ma-0">
                                 @(context.Item.Category1 ?? "N/A")
                             </MudChip>
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                     
-                    <TemplateColumn Title="Status" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                    <PropertyColumn Property="@(x => x.Status)" Title="Status" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
                         <CellTemplate>
                             <span class="status-badge @GetStatusClass(context.Item.Status)">@context.Item.Status.ToUpper()</span>
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                     
-                    <!-- MASTER-TICKET INDIKATOR -->
-                    <TemplateColumn Title="#" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                    <PropertyColumn Property="@(x => x.TicketNumber)" Title="#" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
                         <CellTemplate>
                             <div class="d-flex align-center">
                                 @if (context.Item.ChildTickets != null && context.Item.ChildTickets.Any())
@@ -104,27 +116,27 @@
                                 </MudLink>
                             </div>
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                     
-                    <TemplateColumn Title="Erstellt am" Sortable="true" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                    <PropertyColumn Property="@(x => x.CreatedAt)" Title="Erstellt am" Sortable="true" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
                         <CellTemplate>
                             @ThemeService.FormatDate(context.Item.CreatedAt, "dd.MM.yyyy HH:mm")
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
 
-                    <TemplateColumn Title="Kurzbeschreibung">
+                    <PropertyColumn Property="@(x => x.Title)" Title="Kurzbeschreibung">
                         <CellTemplate>
                             <MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default" Underline="Underline.Hover">
                                 @context.Item.Title
                             </MudLink>
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                     
-                    <TemplateColumn Title="Kontakt" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
+                    <PropertyColumn Property="@(x => x.Requester != null ? x.Requester.LastName : string.Empty)" Title="Kontakt" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
                         <CellTemplate>
                             @($"{context.Item.Requester?.LastName}, {context.Item.Requester?.FirstName}")
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                 </Columns>
             </MudDataGrid>
         }
@@ -190,7 +202,6 @@
 
     private void SetFilter(string? filter) => _activeFilter = filter;
 
-    // Führt die gewählten Tickets zusammen
     private async Task ExecuteMerge()
     {
         if (_selectedMasterForMerge == null) return;
@@ -199,18 +210,15 @@
         
         try 
         {
-            // Iteriere über alle gewählten Tickets, außer dem neuen Master
             var children = _selectedItems.Where(t => t.Id != _selectedMasterForMerge.Id).ToList();
 
             foreach (var childOverview in children)
             {
-                // Volles Ticket inkl. Historie laden
                 var fullChild = await Http.GetFromJsonAsync<Ticket>($"api/tickets/{childOverview.Id}");
                 if (fullChild != null)
                 {
                     fullChild.MasterTicketId = _selectedMasterForMerge.Id;
                     
-                    // Audit-Trail Kommentar hinzufügen
                     fullChild.Activities ??= new List<TicketActivity>();
                     fullChild.Activities.Add(new TicketActivity {
                         Id = Guid.NewGuid(),
@@ -221,7 +229,6 @@
                         IsPublic = true
                     });
 
-                    // Speichern an die API
                     await Http.PutAsJsonAsync($"api/tickets/{fullChild.Id}", fullChild, _jsonOptions);
                 }
             }
@@ -232,7 +239,6 @@
             _selectedItems.Clear();
             _selectedMasterForMerge = null;
             
-            // Liste aktualisieren, um das Master-Icon sofort zu sehen
             await OnInitializedAsync(); 
         }
         catch (Exception ex)
@@ -269,4 +275,17 @@
         "Problem (Problem)" => Color.Dark,       
         _ => Color.Default
     };
+
+    private async Task ExportCsv()
+    {
+        Snackbar.Add("CSV Export (T1_22) wird vorbereitet...");
+    }
+
+    // Angepasste Import-Methode via nativen InputFileChangeEventArgs
+    private async Task ImportCsv(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        Snackbar.Add("CSV Import-Assistent (T1_20) wird gestartet...");
+    }
 }

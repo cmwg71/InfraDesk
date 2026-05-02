@@ -1,116 +1,95 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Assets.razor *@
 @page "/assets"
+@using Microsoft.AspNetCore.Components.Forms
 @using InfraDesk.Core.Entities
 @using MudBlazor
-@using System.Text.Json
+@using InfraDesk.UI.Web.Services
+@using System.Text
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject ThemeService ThemeService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>InfraDesk - Asset-CMDB</PageTitle>
 
 <style>
-    /* PDQ Inventory Style: High Density Layout */
     .pdq-container { background-color: #fff; height: calc(100vh - 100px); display: flex; flex-direction: row; border-top: none; }
-    .pdq-sidebar { width: 260px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
-    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 24px; }
-    
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 20px; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
     .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 8px; margin-top: 16px; }
     .pdq-section-header:first-child { margin-top: 0; border-top: none; }
-    
-    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
-    
-    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
-    
-    /* Grid Optimierung für hohe Dichte */
-    .mud-table-cell { padding: 4px 12px !important; font-size: 0.82rem !important; }
-    .mud-table-row:hover { background-color: rgba(25, 118, 210, 0.05) !important; cursor: pointer; }
+    .import-btn-wrapper { margin: 0; padding: 0; display: flex; align-items: center; }
 </style>
 
-<!-- PDQ Toolbar -->
 <div class="pdq-toolbar">
     <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-    <MudText Typo="Typo.body2" Class="font-weight-bold">Asset-CMDB: @(_activeFilter ?? "Gesamtkatalog")</MudText>
+    <MudText Typo="Typo.body2" Class="font-weight-bold">Asset-CMDB: @(_activeFilter ?? "Alle Assets")</MudText>
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/assets/create"))" Style="text-transform:none; border-radius: 4px;">Objekt hinzufügen</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Style="text-transform:none" OnClick="@(() => Nav.NavigateTo("/assets/create"))">Neues Asset</MudButton>
 </div>
 
 <div class="pdq-container">
-    
-    <!-- ERWEITERTE SIDEBAR: Alle Kategorien wiederhergestellt -->
     <div class="pdq-sidebar">
         <MudNavMenu Margin="Margin.Dense" Rounded="false">
-            
-            <div class="pdq-section-header" style="margin-top: 0; border-top: none;">Filter</div>
-            <MudNavLink OnClick="@(() => SetFilter(null))" Class="@(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.List">Alle Objekte</MudNavLink>
-            
-            <div class="pdq-section-header">Computer & Mobile</div>
-            <MudNavLink OnClick="@(() => SetFilter("Hardware"))" Class="@(_activeFilter == "Hardware" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Computer">Clients & Server</MudNavLink>
-            
-            <div class="pdq-section-header">Netzwerk</div>
-            <MudNavLink OnClick="@(() => SetFilter("Network"))" Class="@(_activeFilter == "Network" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SettingsInputComponent">Switche & Firewalls</MudNavLink>
-            
-            <div class="pdq-section-header">Storage & Backup</div>
-            <MudNavLink OnClick="@(() => SetFilter("Storage"))" Class="@(_activeFilter == "Storage" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SdStorage">SAN / NAS / Tape</MudNavLink>
-
-            <div class="pdq-section-header">Cloud & Virtualisierung</div>
-            <MudNavLink OnClick="@(() => SetFilter("Cloud"))" Class="@(_activeFilter == "Cloud" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Cloud">Instanzen & Cluster</MudNavLink>
-
-            <div class="pdq-section-header">Software & Plattformen</div>
-            <MudNavLink OnClick="@(() => SetFilter("Software"))" Class="@(_activeFilter == "Software" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Terminal">DBs & Applikationen</MudNavLink>
-
-            <div class="pdq-section-header">Rechenzentrum & Strom</div>
-            <MudNavLink OnClick="@(() => SetFilter("Datacenter"))" Class="@(_activeFilter == "Datacenter" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.EvStation">USV / Racks / Klima</MudNavLink>
-
-            <div class="pdq-section-header">Organisation</div>
-            <MudNavLink OnClick="@(() => SetFilter("Org"))" Class="@(_activeFilter == "Org" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Groups">Personen & Teams</MudNavLink>
-
+            <div class="pdq-section-header">Ansichten</div>
+            <MudNavLink OnClick="@(() => SetFilter(null))" Class="@(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.List">Alle Assets</MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Produktiv"))" Class="@(_activeFilter == "Produktiv" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.CheckCircle">Produktiv</MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Auf Lager"))" Class="@(_activeFilter == "Auf Lager" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Inventory">Auf Lager</MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Ausgemustert"))" Class="@(_activeFilter == "Ausgemustert" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Delete">Ausgemustert</MudNavLink>
         </MudNavMenu>
     </div>
 
-    <!-- RECHTE SEITE: DataGrid -->
     <div class="pdq-content">
-        @if (_assets == null)
+        @if (_assets == null) 
         {
             <div class="d-flex justify-center align-center" style="height: 200px;">
                 <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
             </div>
-        }
-        else
+        } 
+        else 
         {
             <MudDataGrid T="Asset" Items="@FilteredAssets" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickFilter" Dense="true" Elevation="0" Bordered="true">
                 <ToolBarContent>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche in Name, S/N oder Tag..." Adornment="Adornment.Start" 
-                                  AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Immediate="true" Margin="Margin.Dense" Style="max-width: 400px;"></MudTextField>
+                    
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suche in allen Daten (Name, Standort, JSON-Details)..." Adornment="Adornment.Start" 
+                                  AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Immediate="true" Margin="Margin.Dense" Style="max-width: 450px;" Class="mr-4">
+                    </MudTextField>
+
+                    <MudTooltip Text="Als CSV exportieren">
+                        <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
+                    </MudTooltip>
+                    
+                    <div class="import-btn-wrapper">
+                        <!-- Nativer Blazor InputFile für zuverlässigen Datei-Upload -->
+                        <MudTooltip Text="Aus CSV importieren">
+                            <MudIconButton HtmlTag="label" for="import-csv-assets" Icon="@Icons.Material.Filled.FileUpload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" />
+                        </MudTooltip>
+                        <InputFile id="import-csv-assets" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
+                    </div>
                 </ToolBarContent>
                 <Columns>
-                    <TemplateColumn Title="Typ" HeaderStyle="width: 40px;" Sortable="false">
+                    <TemplateColumn Title="Typ" HeaderStyle="width: 40px;" Sortable="false" Filterable="false">
                         <CellTemplate>
-                            <MudTooltip Text="@context.Item.AssetType?.Name">
-                                <MudIcon Icon="@GetIcon(context.Item.AssetType?.Name)" Size="Size.Small" Color="Color.Primary" />
-                            </MudTooltip>
+                            <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" Color="Color.Primary" />
                         </CellTemplate>
                     </TemplateColumn>
-                    
-                    <PropertyColumn Property="x => x.Name" Title="Bezeichnung" />
-                    <PropertyColumn Property="x => x.AssetTag" Title="Asset-Tag" />
-                    <PropertyColumn Property="x => x.SerialNumber" Title="S/N" />
-                    <PropertyColumn Property="@(x => x.AssetType != null ? x.AssetType.Name : "---")" Title="Typ" />
-                    <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : "---")" Title="Standort" />
-                    
-                    <TemplateColumn Title="Status" HeaderStyle="width: 120px;">
+                    <PropertyColumn Property="@(x => x.AssetTag)" Title="Asset-Tag" />
+                    <PropertyColumn Property="@(x => x.Name)" Title="Name" />
+                    <PropertyColumn Property="@(x => x.AssetType != null ? x.AssetType.Name : string.Empty)" Title="Kategorie" />
+                    <PropertyColumn Property="@(x => x.SerialNumber)" Title="Seriennummer" />
+                    <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : string.Empty)" Title="Standort" />
+                    <PropertyColumn Property="@(x => x.LifecycleStatus)" Title="Status">
                         <CellTemplate>
-                            <MudChip T="string" Size="Size.Small" 
-                                     Color="@GetStatusColor(context.Item.LifecycleStatus)" 
-                                     Variant="Variant.Text" 
-                                     Class="font-weight-bold">
-                                @context.Item.LifecycleStatus
-                            </MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">@context.Item.LifecycleStatus</MudChip>
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
                 </Columns>
                 <PagerContent>
-                    <MudDataGridPager T="Asset" PageSizeOptions="new int[] { 25, 50, 100, 500 }" />
+                    <MudDataGridPager T="Asset" PageSizeOptions="@(new int[] { 50, 100, 250, 500 })" />
                 </PagerContent>
             </MudDataGrid>
         }
@@ -122,76 +101,138 @@
     private string _searchString = "";
     private string? _activeFilter = null;
 
-    private IEnumerable<Asset> FilteredAssets => _assets?
-        .Where(a => _activeFilter == null || IsInCategory(a, _activeFilter)) ?? Enumerable.Empty<Asset>();
+    private IEnumerable<Asset> FilteredAssets
+    {
+        get
+        {
+            if (_assets == null) return new List<Asset>();
+            return _assets.Where(x => string.IsNullOrEmpty(_activeFilter) || x.LifecycleStatus == _activeFilter);
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        try { _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets"); }
-        catch { _assets = new List<Asset>(); }
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            string jsCode = "window.downloadFileFromBase64 = function(fileName, contentType, base64) { var link = document.createElement('a'); link.download = fileName; link.href = 'data:' + contentType + ';base64,' + base64; document.body.appendChild(link); link.click(); document.body.removeChild(link); };";
+            await JSRuntime.InvokeVoidAsync("eval", jsCode);
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try { 
+            _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets"); 
+        }
+        catch { 
+            _assets = new List<Asset>(); 
+        }
     }
 
     private void SetFilter(string? filter) => _activeFilter = filter;
 
-    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args) => Nav.NavigateTo($"/assets/{args.Item.Id}");
-
-    private Color GetStatusColor(string? status) => status switch {
-        "Produktiv" or "Aktiv" => Color.Success,
-        "Wartung" or "In Planung" => Color.Warning,
-        "Defekt" or "Ausgemustert" => Color.Error,
-        _ => Color.Default
-    };
-
-    // VOLLSTÄNDIGE KATEGORIE-LOGIK WIEDERHERGESTELLT
-    private bool IsInCategory(Asset a, string cat) {
-        var name = a.AssetType?.Name;
-        if (string.IsNullOrEmpty(name)) return false;
-
-        return cat switch {
-            "Hardware" => name is "Rack-Server" or "Laptop" or "Mainframe" or "Blade-Center" or "Desktop" or "Workstation" or "Tablet" or "Smartphone" or "Backup-Appliance" or "Hardware-Appliance",
-            "Storage" => name is "SAN-Storage" or "NAS-System" or "NVMe-Array" or "Tape-Library",
-            "Network" => name is "Core-Switch" or "Access-Switch" or "Firewall" or "Router" or "Load-Balancer" or "VPN-Gateway" or "Access-Point" or "IDS-IPS-System" or "WLAN-Controller" or "WAN-Leitung" or "Internet-Breakout" or "SFP-Modul",
-            "Cloud" => name is "Cloud-Instanz" or "S3-Bucket" or "VM-Cluster" or "Kubernetes-Cluster" or "Kubernetes-Namespace" or "Entra-ID-Tenant" or "Azure-VM" or "AWS-EC2" or "Cloud-VNET" or "Docker-Host" or "K8s-Node",
-            "Datacenter" => name is "USV-Anlage" or "Klimagerät" or "PDU" or "Rack" or "Stellplatz",
-            "Software" => name is "Betriebssystem" or "Datenbank-Instanz" or "MS-SQL-Server" or "PostgreSQL-DB" or "Oracle-DB" or "SAP-HANA" or "Active-Directory-Domain" or "DNS-DHCP-Server" or "PKI-Dienst" or "Linux-Distribution" or "Client-OS",
-            "Org" => name is "Person" or "Kontakt" or "Gruppe" or "Team" or "Kostenstelle",
-            _ => false
-        };
+    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args)
+    {
+        Nav.NavigateTo($"/assets/{args.Item.Id}");
     }
 
-    // VOLLSTÄNDIGE ICON-MAPPING WIEDERHERGESTELLT
-    private string GetIcon(string? type) => type switch {
-        "Laptop" => Icons.Material.Filled.Laptop,
-        "Desktop" or "Client-OS" => Icons.Material.Filled.DesktopWindows,
-        "Workstation" => Icons.Material.Filled.Computer,
-        "Smartphone" => Icons.Material.Filled.Smartphone,
-        "Tablet" => Icons.Material.Filled.TabletAndroid,
-        "Rack-Server" => Icons.Material.Filled.Storage,
-        "Blade-Center" => Icons.Material.Filled.ViewQuilt,
-        "Mainframe" => Icons.Material.Filled.DeveloperBoard,
-        "Rack" or "Stellplatz" => Icons.Material.Filled.ViewArray,
-        "PDU" => Icons.Material.Filled.Power,
-        "USV-Anlage" => Icons.Material.Filled.BatteryChargingFull,
-        "Klimagerät" => Icons.Material.Filled.AcUnit,
-        "SAN-Storage" or "NVMe-Array" => Icons.Material.Filled.Dns,
-        "NAS-System" => Icons.Material.Filled.FolderShared,
-        "Tape-Library" => Icons.Material.Filled.Save,
-        "Core-Switch" or "Access-Switch" => Icons.Material.Filled.SettingsInputComponent,
-        "Router" => Icons.Material.Filled.Router,
-        "Access-Point" => Icons.Material.Filled.Wifi,
-        "Firewall" => Icons.Material.Filled.Security,
-        "VPN-Gateway" => Icons.Material.Filled.VpnLock,
-        "Cloud-Instanz" or "Azure VM" => Icons.Material.Filled.Cloud,
-        "Kubernetes-Cluster" or "VM-Cluster" => Icons.Material.Filled.Hub,
-        "Betriebssystem" or "Windows Server" => Icons.Material.Filled.Settings,
-        "PostgreSQL-DB" or "MS-SQL-Server" or "Datenbank-Instanz" => Icons.Material.Filled.Dataset,
-        "Person" or "Kontakt" => Icons.Material.Filled.Person,
-        "Gruppe" or "Team" => Icons.Material.Filled.Groups,
-        _ => Icons.Material.Filled.Label
-    };
+    // ERWEITERT: Sucht nun in allen relevanten Feldern inkl. dynamischen JSON-Daten
+    private Func<Asset, bool> QuickFilter => x => 
+        string.IsNullOrWhiteSpace(_searchString) || 
+        (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
+        (x.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.LifecycleStatus?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.AssetType?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.Location?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.DynamicDataJson?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true);
 
-    private Func<Asset, bool> QuickFilter => x => string.IsNullOrWhiteSpace(_searchString) || 
-        (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) || 
-        (x.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
-        (x.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false);
+    private async Task ExportCsv()
+    {
+        try
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("AssetTag;Name;Kategorie;Seriennummer;Standort;Status");
+            
+            foreach(var a in FilteredAssets) 
+            {
+                var tag = EscapeCsv(a.AssetTag);
+                var name = EscapeCsv(a.Name);
+                var cat = EscapeCsv(a.AssetType?.Name);
+                var sn = EscapeCsv(a.SerialNumber);
+                var loc = EscapeCsv(a.Location?.Name);
+                var stat = EscapeCsv(a.LifecycleStatus);
+                
+                sb.AppendLine($"{tag};{name};{cat};{sn};{loc};{stat}");
+            }
+            
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var base64 = Convert.ToBase64String(bytes);
+            
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBase64", $"InfraDesk_Assets_{DateTime.Now:yyyyMMdd}.csv", "text/csv", base64);
+            
+            Snackbar.Add("Export erfolgreich abgeschlossen!");
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add($"Fehler beim Export: {ex.Message}");
+        }
+    }
+
+    private string EscapeCsv(string? val) 
+    {
+        if (string.IsNullOrEmpty(val)) return "";
+        if (val.Contains(";") || val.Contains("\"") || val.Contains("\n"))
+        {
+            return "\"" + val.Replace("\"", "\"\"") + "\"";
+        }
+        return val;
+    }
+
+    private async Task ImportCsv(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        try 
+        {
+            using var stream = file.OpenReadStream(10 * 1024 * 1024);
+            using var reader = new System.IO.StreamReader(stream, Encoding.UTF8);
+            var content = await reader.ReadToEndAsync();
+            var lines = content.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            int importedCount = 0;
+            
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var parts = lines[i].Split(';');
+                if (parts.Length >= 2) 
+                {
+                    var asset = new Asset 
+                    {
+                        AssetTag = parts[0],
+                        Name = parts[1],
+                        SerialNumber = parts.Length >= 4 ? parts[3] : "",
+                        LifecycleStatus = parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]) ? parts[5] : "Auf Lager",
+                        DynamicDataJson = "{}" 
+                    };
+                    
+                    var res = await Http.PostAsJsonAsync("api/assets", asset);
+                    if (res.IsSuccessStatusCode) importedCount++;
+                }
+            }
+            
+            Snackbar.Add($"{importedCount} Assets erfolgreich importiert!");
+            await LoadDataAsync(); 
+        } 
+        catch (Exception ex) 
+        {
+            Snackbar.Add($"Fehler beim Importieren: {ex.Message}");
+        }
+    }
 }

@@ -248,7 +248,6 @@ public class IpamController : ControllerBase
             {
                 ip.LastPingDate = DateTime.UtcNow;
 
-                // NEU: Automatische MAC-Adressen Pflege
                 if (!string.IsNullOrEmpty(result.MacAddress))
                 {
                     ip.MacAddress = result.MacAddress;
@@ -315,6 +314,83 @@ public class IpamController : ControllerBase
         return NoContent();
     }
 
+    // 10. NEU: Manuellen Discovery-Scan für ein Subnetz aus der UI anfordern
+    [HttpPost("subnets/{id}/scan")]
+    public async Task<IActionResult> TriggerManualScan(Guid id)
+    {
+        var subnet = await _context.Subnets.FindAsync(id);
+        if (subnet == null) return NotFound("Subnetz nicht gefunden.");
+
+        // Startet den Scan asynchron im Hintergrund, um die UI nicht warten zu lassen
+        _ = Task.Run(async () =>
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var bgContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var ipsToScan = await bgContext.IpAddresses.Where(ip => ip.SubnetId == subnet.Id).ToListAsync();
+            var semaphore = new SemaphoreSlim(20);
+            var results = new List<PingScanResultDto>();
+            var tasks = new List<Task>();
+
+            foreach (var ip in ipsToScan)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync();
+                    try
+                    {
+                        using var ping = new Ping();
+                        var reply = await ping.SendPingAsync(ip.Address, 2000);
+                        if (reply.Status == IPStatus.Success)
+                        {
+                            lock (results)
+                            {
+                                results.Add(new PingScanResultDto
+                                {
+                                    IpAddress = ip.Address,
+                                    IsAlive = true,
+                                    RoundtripTime = reply.RoundtripTime
+                                });
+                            }
+                        }
+                    }
+                    catch { }
+                    finally { semaphore.Release(); }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+
+            if (results.Any())
+            {
+                var aliveIps = results.Where(r => r.IsAlive).ToDictionary(r => r.IpAddress);
+                foreach (var ip in ipsToScan)
+                {
+                    if (aliveIps.TryGetValue(ip.Address, out var result))
+                    {
+                        ip.LastPingDate = DateTime.UtcNow;
+                        if (ip.AssignedAssetId == null && !ip.IsReserved)
+                        {
+                            if (ip.IpStatus == "Free")
+                            {
+                                ip.RequiresManualReview = true;
+                                ip.Description = $"Auto-Discovery (Manuell)! Latenz: {result.RoundtripTime}ms";
+                            }
+                            ip.IpStatus = "Rogue";
+                        }
+                        else if (ip.AssignedAssetId != null)
+                        {
+                            ip.IpStatus = "Used";
+                        }
+                    }
+                }
+                await bgContext.SaveChangesAsync();
+            }
+        });
+
+        return Ok(new { Message = "Scan im Hintergrund gestartet." });
+    }
+
     // Hilfsfunktionen
     private uint ParseIpToUint(string ipAddress)
     {
@@ -332,7 +408,6 @@ public class IpamController : ControllerBase
     }
 }
 
-// DTO Update: Enthält nun die MacAddress
 public class PingScanResultDto
 {
     public string IpAddress { get; set; } = string.Empty;

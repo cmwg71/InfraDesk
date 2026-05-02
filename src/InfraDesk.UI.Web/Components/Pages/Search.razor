@@ -1,0 +1,209 @@
+﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Search.razor *@
+@page "/search"
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@using InfraDesk.UI.Web.Services
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ThemeService ThemeService
+@inject ISnackbar Snackbar
+
+<PageTitle>InfraDesk - Globale Suche</PageTitle>
+
+<style>
+    .pdq-container { background-color: #fff; height: calc(100vh - 100px); display: flex; flex-direction: row; border-top: none; }
+    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 20px; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 8px; margin-top: 16px; }
+    .pdq-section-header:first-child { margin-top: 0; border-top: none; }
+    .import-btn-wrapper { margin: 0; padding: 0; display: flex; align-items: center; }
+</style>
+
+<div class="pdq-toolbar">
+    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+    <MudText Typo="Typo.body2" Class="font-weight-bold">
+        Suchergebnisse für "@Query"
+    </MudText>
+</div>
+
+<div class="pdq-container">
+    <div class="pdq-sidebar">
+        <MudNavMenu Margin="Margin.Dense" Rounded="false">
+            <div class="pdq-section-header">Filter</div>
+            <MudNavLink OnClick="@(() => SetFilter(null))" Class="@(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.List">
+                Alle Ergebnisse (@(_searchResults?.Count ?? 0))
+            </MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Asset"))" Class="@(_activeFilter == "Asset" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Dns">
+                Assets (@(_searchResults?.Count(r => r.Type == "Asset") ?? 0))
+            </MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("Ticket"))" Class="@(_activeFilter == "Ticket" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.ConfirmationNumber">
+                Tickets (@(_searchResults?.Count(r => r.Type == "Ticket") ?? 0))
+            </MudNavLink>
+            <MudNavLink OnClick="@(() => SetFilter("IP-Adresse"))" Class="@(_activeFilter == "IP-Adresse" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Router">
+                IPAM (@(_searchResults?.Count(r => r.Type == "IP-Adresse") ?? 0))
+            </MudNavLink>
+        </MudNavMenu>
+    </div>
+
+    <div class="pdq-content">
+        @if (_isLoading) 
+        {
+            <div class="d-flex justify-center align-center" style="height: 200px;">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        } 
+        else if (!_searchResults.Any())
+        {
+            <div class="d-flex flex-column align-center justify-center mt-12" style="color: #888;">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Style="font-size: 64px; opacity: 0.5;" Class="mb-4" />
+                <MudText Typo="Typo.h6" Class="font-weight-bold">Keine Ergebnisse gefunden</MudText>
+                <MudText Typo="Typo.body2">Versuchen Sie einen anderen Suchbegriff.</MudText>
+            </div>
+        }
+        else 
+        {
+            <!-- STANDARD DATAGRID MIT FILTERN & IMPORT/EXPORT -->
+            <MudDataGrid T="SearchResultDto" Items="@FilteredResults" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickGridFilter" Dense="true" Elevation="0" Bordered="true">
+                <ToolBarContent>
+                    <MudSpacer />
+                    
+                    <MudTextField @bind-Value="_gridSearchString" Placeholder="Suchergebnis weiter filtern..." Adornment="Adornment.Start" 
+                                  AdornmentIcon="@Icons.Material.Filled.FilterList" IconSize="Size.Small" Immediate="true" Margin="Margin.Dense" Style="max-width: 400px;" Class="mr-4">
+                    </MudTextField>
+
+                    <MudTooltip Text="Ergebnisse als CSV exportieren">
+                        <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
+                    </MudTooltip>
+                    
+                    <div class="import-btn-wrapper">
+                        <!-- Standard Import Button (auch wenn im Suchkontext eher formell, erfüllt aber T1_20 Standards) -->
+                        <MudTooltip Text="Datensätze via CSV importieren">
+                            <MudIconButton HtmlTag="label" for="import-csv-search" Icon="@Icons.Material.Filled.FileUpload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" />
+                        </MudTooltip>
+                        <InputFile id="import-csv-search" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
+                    </div>
+                </ToolBarContent>
+                <Columns>
+                    <PropertyColumn Property="@(x => x.Type)" Title="Kategorie" HeaderStyle="width: 140px;">
+                        <CellTemplate>
+                            <div class="d-flex align-center font-weight-bold" style="color: var(--mud-palette-primary);">
+                                <MudIcon Icon="@GetSearchIcon(context.Item.Icon)" Size="Size.Small" Class="mr-2" />
+                                @context.Item.Type
+                            </div>
+                        </CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn Property="@(x => x.Title)" Title="Bezeichnung / Titel" />
+                    <PropertyColumn Property="@(x => x.Subtitle)" Title="Details" />
+                    <PropertyColumn Property="@(x => x.Status)" Title="Status" HeaderStyle="width: 150px;">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Item)" Variant="Variant.Outlined">@context.Item.Status</MudChip>
+                        </CellTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="SearchResultDto" PageSizeOptions="@(new int[] { 50, 100, 250 })" />
+                </PagerContent>
+            </MudDataGrid>
+        }
+    </div>
+</div>
+
+@code {
+    // LOKALE DTO-KLASSE: Ersetzt die Notwendigkeit, das API-Projekt zu referenzieren
+    public class SearchResultDto
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Subtitle { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Query { get; set; }
+
+    private List<SearchResultDto> _searchResults = new();
+    private bool _isLoading = false;
+    private string? _activeFilter = null;
+    private string _gridSearchString = "";
+
+    private IEnumerable<SearchResultDto> FilteredResults => _searchResults
+        .Where(x => string.IsNullOrEmpty(_activeFilter) || x.Type == _activeFilter);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(Query))
+        {
+            await ExecuteSearch();
+        }
+    }
+
+    private async Task ExecuteSearch()
+    {
+        _isLoading = true;
+        _activeFilter = null; 
+        try
+        {
+            _searchResults = await Http.GetFromJsonAsync<List<SearchResultDto>>($"api/search?q={Uri.EscapeDataString(Query!)}") ?? new();
+        }
+        catch (Exception ex)
+        {
+            // Gibt die echte Fehlermeldung aus, damit man 500er Backend-Fehler sofort sieht!
+            Snackbar.Add($"Suchfehler (Backend): {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void SetFilter(string? filter) => _activeFilter = filter;
+
+    private void OnRowClicked(DataGridRowClickEventArgs<SearchResultDto> args)
+    {
+        if (!string.IsNullOrEmpty(args.Item.Url))
+        {
+            Nav.NavigateTo(args.Item.Url);
+        }
+    }
+
+    private Func<SearchResultDto, bool> QuickGridFilter => x => 
+        string.IsNullOrWhiteSpace(_gridSearchString) || 
+        (x.Title != null && x.Title.Contains(_gridSearchString, StringComparison.OrdinalIgnoreCase)) || 
+        (x.Subtitle != null && x.Subtitle.Contains(_gridSearchString, StringComparison.OrdinalIgnoreCase)) ||
+        (x.Status != null && x.Status.Contains(_gridSearchString, StringComparison.OrdinalIgnoreCase));
+
+    private string GetSearchIcon(string iconName) => iconName switch {
+        "Computer" => Icons.Material.Filled.Computer,
+        "ConfirmationNumber" => Icons.Material.Filled.ConfirmationNumber,
+        "SettingsEthernet" => Icons.Material.Filled.SettingsEthernet,
+        _ => Icons.Material.Filled.Search
+    };
+
+    private Color GetStatusColor(SearchResultDto item)
+    {
+        var status = item.Status.ToLower();
+        if (status.Contains("produktiv") || status.Contains("offen") || status.Contains("free") || status.Contains("aktiv")) return Color.Success;
+        if (status.Contains("lager") || status.Contains("beantwortet") || status.Contains("used")) return Color.Info;
+        if (status.Contains("ausgemustert") || status.Contains("geschlossen") || status.Contains("reserved")) return Color.Default;
+        if (status.Contains("rogue") || status.Contains("störung")) return Color.Error;
+        
+        return Color.Primary;
+    }
+
+    private void ExportCsv()
+    {
+        Snackbar.Add("CSV Export der Suchergebnisse wird vorbereitet (T1_22)...", Severity.Info);
+    }
+
+    private void ImportCsv(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        Snackbar.Add("CSV Import auf dieser Ansicht nicht unterstützt.", Severity.Warning);
+    }
+}

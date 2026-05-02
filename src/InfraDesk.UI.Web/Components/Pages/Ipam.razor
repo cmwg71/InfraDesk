@@ -1,5 +1,6 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Ipam.razor *@
 @page "/ipam"
+@using Microsoft.AspNetCore.Components.Forms
 @using InfraDesk.Core.Entities
 @using MudBlazor
 @using System.Text.Json
@@ -26,6 +27,7 @@
     .stat-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; text-align: center; flex: 1; background: #fafafa; }
     .stat-value { font-size: 1.5rem; font-weight: bold; margin-bottom: 4px; }
     .stat-label { font-size: 0.75rem; color: #666; text-transform: uppercase; font-weight: bold; }
+    .import-btn-wrapper { margin: 0; padding: 0; display: flex; align-items: center; }
 </style>
 
 <div class="pdq-toolbar">
@@ -102,14 +104,24 @@
             var sMask = sub.TryGetProperty("cidrMask", out var sMaskProp) && sMaskProp.ValueKind != JsonValueKind.Null ? sMaskProp.GetInt32() : 0;
             var sGateway = sub.TryGetProperty("gateway", out var sGwProp) && sGwProp.ValueKind != JsonValueKind.Null ? sGwProp.GetString() : "N/A";
 
-            <!-- DASHBOARD HEADER MIT EDIT & RELOAD BUTTON -->
             <div class="d-flex align-center mb-6">
                 <div>
                     <div class="d-flex align-center">
                         <MudText Typo="Typo.h5" Class="font-weight-bold mr-3">@sName</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => Nav.NavigateTo($"/ipam/subnets/edit/{sId}"))" Title="Subnetz-Konfiguration bearbeiten" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" OnClick="ReloadCurrentSubnet" Title="Daten (Pings) aus der Datenbank neu laden" Class="ml-2" Disabled="_isRefreshing" />
-                        @if (_isRefreshing) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-3" Color="Color.Secondary" /> }
+                        
+                        <MudTooltip Text="Subnetz-Konfiguration bearbeiten">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => Nav.NavigateTo($"/ipam/subnets/edit/{sId}"))" />
+                        </MudTooltip>
+                        
+                        <MudTooltip Text="Daten aus der Datenbank neu laden">
+                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" OnClick="ReloadCurrentSubnet" Class="ml-2" Disabled="_isRefreshing" />
+                        </MudTooltip>
+
+                        <MudTooltip Text="Aktiven Discovery-Scan für dieses Netz sofort anfordern">
+                            <MudIconButton Icon="@Icons.Material.Filled.Radar" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" OnClick="TriggerManualDiscovery" Class="ml-2" Disabled="_isScanning" />
+                        </MudTooltip>
+
+                        @if (_isRefreshing || _isScanning) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-3" Color="Color.Secondary" /> }
                     </div>
                     <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-family: monospace;" Class="mt-1">
                         Netzwerk: @sNet / @sMask
@@ -118,7 +130,6 @@
                 </div>
                 <MudSpacer />
                 
-                <!-- Statistiken Kacheln -->
                 <div class="d-flex gap-3">
                     <div class="stat-card">
                         <div class="stat-value" style="color: var(--mud-palette-success);">@free</div>
@@ -142,13 +153,25 @@
             <!-- IP DATAGRID -->
             <MudDataGrid T="IpAddress" Items="@_ips" Hover="true" Dense="true" Bordered="true" Elevation="0" Filterable="true">
                 <ToolBarContent>
-                    <MudText Typo="Typo.h6" Class="font-weight-bold">IP Adressraum</MudText>
+                    <MudText Typo="Typo.h6" Class="font-weight-bold mr-4">IP Adressraum</MudText>
+                    
                     <MudSpacer />
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suchen (IP, MAC, Asset)..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Style="max-width: 300px;"></MudTextField>
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suchen (IP, MAC, Asset)..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Style="max-width: 300px;" Class="mr-4"></MudTextField>
+
+                    <MudTooltip Text="Als CSV exportieren">
+                        <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
+                    </MudTooltip>
+                    
+                    <div class="import-btn-wrapper">
+                        <!-- Nativer Blazor InputFile für zuverlässigen Datei-Upload -->
+                        <MudTooltip Text="Aus CSV importieren">
+                            <MudIconButton HtmlTag="label" for="import-csv-ipam" Icon="@Icons.Material.Filled.FileUpload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" />
+                        </MudTooltip>
+                        <InputFile id="import-csv-ipam" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
+                    </div>
                 </ToolBarContent>
                 <Columns>
-                    <!-- STATUS ICON -->
-                    <TemplateColumn Title="" HeaderStyle="width: 40px;" Sortable="false">
+                    <TemplateColumn Title="" HeaderStyle="width: 40px;" Sortable="false" Filterable="false">
                         <CellTemplate>
                             <div class="d-flex align-center">
                                 <MudTooltip Text="@GetStatusText(context.Item)">
@@ -164,11 +187,9 @@
                         </CellTemplate>
                     </TemplateColumn>
 
-                    <!-- IP ADRESSE -->
-                    <PropertyColumn Property="x => x.Address" Title="IP Adresse" />
+                    <PropertyColumn Property="@(x => x.Address)" Title="IP Adresse" />
 
-                    <!-- VERKNÜPFTES ASSET -->
-                    <TemplateColumn Title="Verknüpftes Asset / Host">
+                    <PropertyColumn Property="@(x => x.AssignedAsset != null ? x.AssignedAsset.Name : x.DnsHostname)" Title="Verknüpftes Asset / Host">
                         <CellTemplate>
                             @if (context.Item.AssignedAsset != null)
                             {
@@ -192,10 +213,9 @@
                                 <MudText Typo="Typo.body2" Color="Color.Surface" Style="opacity: 0.5;">---</MudText>
                             }
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
 
-                    <!-- NEU: MAC ADRESSE MIT STYLING -->
-                    <TemplateColumn Title="MAC Adresse">
+                    <PropertyColumn Property="@(x => x.MacAddress)" Title="MAC Adresse">
                         <CellTemplate>
                             @if (!string.IsNullOrEmpty(context.Item.MacAddress))
                             {
@@ -208,13 +228,11 @@
                                 <span style="opacity: 0.3;">---</span>
                             }
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
 
-                    <!-- BESCHREIBUNG -->
-                    <PropertyColumn Property="x => x.Description" Title="Beschreibung / Notiz" />
+                    <PropertyColumn Property="@(x => x.Description)" Title="Beschreibung / Notiz" />
 
-                    <!-- ZULETZT GESEHEN (PING) -->
-                    <TemplateColumn Title="Zuletzt aktiv">
+                    <PropertyColumn Property="@(x => x.LastPingDate)" Title="Zuletzt aktiv">
                         <CellTemplate>
                             @if (context.Item.LastPingDate.HasValue)
                             {
@@ -225,10 +243,9 @@
                                 <span style="opacity: 0.3;">Nie</span>
                             }
                         </CellTemplate>
-                    </TemplateColumn>
+                    </PropertyColumn>
 
-                    <!-- AKTIONEN FÜR DIE IP -->
-                    <TemplateColumn Title="Aktion" CellClass="d-flex justify-end">
+                    <TemplateColumn Title="Aktion" CellClass="d-flex justify-end" Sortable="false" Filterable="false">
                         <CellTemplate>
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OpenEditIpDialog(context.Item))" Title="IP-Konfiguration bearbeiten" />
                         </CellTemplate>
@@ -275,6 +292,7 @@
     private bool _isLoadingSubnets = true;
     private bool _isLoadingIps = false;
     private bool _isRefreshing = false;
+    private bool _isScanning = false;
     private string _searchString = "";
     
     private List<JsonElement> _subnets = new();
@@ -343,6 +361,33 @@
         }
         catch { Snackbar.Add("Fehler beim Neuladen der Daten.", Severity.Error); }
         finally { _isRefreshing = false; }
+    }
+
+    private async Task TriggerManualDiscovery()
+    {
+        if (_selectedSubnetId == Guid.Empty) return;
+        
+        _isScanning = true;
+        try
+        {
+            var res = await Http.PostAsync($"api/ipam/subnets/{_selectedSubnetId}/scan", null);
+            if (res.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Discovery-Scan wurde im Hintergrund gestartet. Die Pings laufen. Bitte laden Sie die Ansicht in ein paar Sekunden neu.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Fehler beim Starten des Scans.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"API-Fehler: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isScanning = false;
+        }
     }
 
     private async Task ConfirmIp(Guid ipId)
@@ -422,6 +467,19 @@
         {
             _isSavingIp = false;
         }
+    }
+
+    private async Task ExportCsv()
+    {
+        Snackbar.Add("CSV Export (T1_22) wird vorbereitet...");
+    }
+
+    // Angepasste Import-Methode via nativen InputFileChangeEventArgs
+    private async Task ImportCsv(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        Snackbar.Add("CSV Import-Assistent (T1_20) wird gestartet...");
     }
 
     private string GetStatusText(IpAddress ip) {

@@ -1,148 +1,91 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Layout/MainLayout.razor *@
+@namespace InfraDesk.UI.Web.Components.Layout
 @inherits LayoutComponentBase
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
-@using Microsoft.AspNetCore.Components.Authorization
-@using System.Security.Claims
-@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Web
 @inject ThemeService ThemeService
-@inject HttpClient Http
 @inject NavigationManager Nav
-@inject ISnackbar Snackbar
 @inject InfraDeskAuthStateProvider AuthStateProvider
+@inject HttpClient Http
 @implements IDisposable
 
-<!-- CascadingAuthenticationState direkt im Layout, löst das .NET 8 Boundary-Problem für Unterkomponenten -->
-<CascadingAuthenticationState>
-    <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
-    <MudDialogProvider />
-    <MudSnackbarProvider />
-    <MudPopoverProvider />
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
 
-    <!-- Sicherheits-Wrapper: Blockiert unbefugte Render-Zugriffe -->
-    <AuthorizeView>
-        <Authorized Context="authState">
-            <MudLayout>
-                <MudAppBar Elevation="1" Style="@AppbarStyle">
-                    <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-                    <img src="InfraDesk_Logo.png" alt="InfraDesk Logo" style="height: 48px; margin-left: 8px; object-fit: contain; display: block;" />
-                    
-                    <MudSpacer />
-                    
-                    <!-- Tenant Switcher (Multi-Mandanten) -->
-                    @if (_availableTenants != null && _availableTenants.Count > 1)
-                    {
-                        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" Class="mr-4">
-                            <ActivatorContent>
-                                <MudButton Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Domain" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" Style="text-transform: none; font-weight: bold;">
-                                    @_currentTenantName
-                                </MudButton>
-                            </ActivatorContent>
-                            <ChildContent>
-                                <div class="px-4 py-2">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="font-weight-bold" Style="text-transform: uppercase;">Aktiver Mandant</MudText>
-                                </div>
-                                @foreach (var tenant in _availableTenants)
-                                {
-                                    bool isActive = tenant.Id == _currentTenantId;
-                                    <MudMenuItem OnClick="@(() => SwitchTenant(tenant.Id, tenant.Name))">
-                                        <div class="d-flex align-center @(isActive ? "font-weight-bold" : "")" style="@(isActive ? $"color: {ThemeService.Config.PrimaryColor};" : "")">
-                                            <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Class="mr-3" />
-                                            @tenant.Name
-                                            @if (isActive) { <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="ml-auto" /> }
-                                        </div>
-                                    </MudMenuItem>
-                                }
-                            </ChildContent>
-                        </MudMenu>
-                    }
-                    else if (_availableTenants != null && _availableTenants.Count == 1)
-                    {
-                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small" Class="mr-4 font-weight-bold" Icon="@Icons.Material.Filled.Domain">@_currentTenantName</MudChip>
-                    }
+<MudLayout>
+    <MudAppBar Elevation="1" Style="@AppbarStyle">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <img src="InfraDesk_Logo.png" alt="InfraDesk Logo" style="height: 48px; margin-left: 8px; object-fit: contain; display: block; filter: brightness(0) invert(1);" />
+        
+        <MudSpacer />
+        
+        <!-- GLOBALE SUCHE (Leitet nun auf die Suchergebnis-Seite weiter) -->
+        <MudTextField @bind-Value="_globalSearchQuery" 
+                      Placeholder="Globale Suche (Enter)..." 
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense" 
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      AdornmentColor="Color.Inherit"
+                      OnKeyDown="HandleSearch"
+                      Immediate="true"
+                      Style="background-color: rgba(255,255,255,0.15); border-radius: 4px; width: 350px; color: white;" 
+                      Class="mr-4 mt-2 mb-2 global-search" />
 
-                    <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleDarkMode" />
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleDarkMode" Title="Design umschalten" />
+        
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="ml-2">
+            <ActivatorContent>
+                <MudAvatar Color="Color.Secondary" Size="Size.Medium" Class="cursor-pointer font-weight-bold">@_userInitials</MudAvatar>
+            </ActivatorContent>
+            <ChildContent>
+                <div class="px-4 py-3" style="min-width: 220px;">
+                    <MudText Typo="Typo.subtitle2" Class="font-weight-bold">@_userName</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_userEmail</MudText>
+                    <div class="mt-2">
+                        <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(_userRole)" Variant="Variant.Filled">@_userRole</MudChip>
+                    </div>
+                </div>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/settings">Einstellungen</MudMenuItem>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout" style="color: var(--mud-palette-error);">Abmelden</MudMenuItem>
+            </ChildContent>
+        </MudMenu>
+    </MudAppBar>
 
-                    <!-- BENUTZER PROFIL MENÜ -->
-                    <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" Class="ml-2">
-                        <ActivatorContent>
-                            <MudAvatar Color="Color.Primary" Size="Size.Medium" Style="cursor: pointer;">@GetInitials(_userName)</MudAvatar>
-                        </ActivatorContent>
-                        <ChildContent>
-                            <div class="px-6 py-4 d-flex flex-column align-center">
-                                <MudAvatar Color="Color.Primary" Size="Size.Large" Class="mb-2">@GetInitials(_userName)</MudAvatar>
-                                <MudText Typo="Typo.body1" Class="font-weight-bold">@_userName</MudText>
-                                <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(_userRole)" Class="mt-1 font-weight-bold">@_userRole</MudChip>
-                            </div>
-                            <MudDivider />
-                            <MudMenuItem Icon="@Icons.Material.Filled.Person">Mein Profil</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Filled.Settings" OnClick="@(() => Nav.NavigateTo("/settings"))">System-Einstellungen</MudMenuItem>
-                            <MudDivider />
-                            <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout" Style="color: var(--mud-palette-error);">Abmelden</MudMenuItem>
-                        </ChildContent>
-                    </MudMenu>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Docked" Style="@DrawerStyle">
+        <MudNavMenu Margin="Margin.Dense" Class="mt-4">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+            <MudNavGroup Title="Support & Helpdesk" Icon="@Icons.Material.Filled.HeadsetMic" Expanded="true">
+                <MudNavLink Href="tickets" Icon="@Icons.Material.Filled.ConfirmationNumber">Ticket-Queue</MudNavLink>
+            </MudNavGroup>
+            <MudNavGroup Title="Infrastruktur" Icon="@Icons.Material.Filled.Computer" Expanded="true">
+                <MudNavLink Href="assets" Icon="@Icons.Material.Filled.Dns">Asset-CMDB</MudNavLink>
+                <MudNavLink Href="ipam" Icon="@Icons.Material.Filled.Router">IPAM / Netzwerke</MudNavLink>
+            </MudNavGroup>
+        </MudNavMenu>
+    </MudDrawer>
 
-                </MudAppBar>
-
-                <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Style="@DrawerStyle">
-                    <NavMenu />
-                </MudDrawer>
-
-                <MudMainContent Style="@MainContentStyle">
-                    
-                    <!-- GLOBALE WARNUNG: Erscheint nur, wenn Stammdaten fehlen (nur für Admins relevant) -->
-                    @if (_isSetupComplete == false && !_isLoadingSetup && _userRole == "Global Admin")
-                    {
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Square="true" Class="py-4" ContentAlignment="HorizontalAlignment.Center" Style="box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                            <div class="d-flex align-center justify-center">
-                                <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Size="Size.Large" Class="mr-4" />
-                                <div>
-                                    <MudText Typo="Typo.h6" Class="font-weight-bold mb-1">Achtung: Ersteinrichtung unvollständig!</MudText>
-                                    <MudText Typo="Typo.body2">Bitte definieren Sie zwingend die Unternehmens-Stammdaten und den Hauptstandort.</MudText>
-                                </div>
-                                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Class="ml-8 font-weight-bold" OnClick="@(() => Nav.NavigateTo("/settings"))">Jetzt einrichten</MudButton>
-                            </div>
-                        </MudAlert>
-                    }
-
-                    <!-- LAYOUT FIX: pt-1 statt pt-4, um den Leerraum zur Titleleiste zu minimieren -->
-                    <!-- px-0 entfernt seitliche Abstände, damit das PDQ-Layout bündig abschließt -->
-                    <MudContainer MaxWidth="MaxWidth.False" Class="pt-1 px-0 pb-16">
-                        @Body
-                    </MudContainer>
-                </MudMainContent>
-
-                <MudAppBar Bottom="true" Fixed="true" Elevation="4" Dense="true" Style="@StatusBarStyle">
-                    <MudLink Href="/settings" Style="color: inherit !important;" Underline="Underline.None" Class="d-flex align-center hover-opacity">
-                        <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mr-2" />
-                        <MudText Typo="Typo.caption" Class="font-weight-bold">System-Einstellungen</MudText>
-                    </MudLink>
-                    <MudSpacer />
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-                        <MudIcon Icon="@(_isSetupComplete ? Icons.Material.Filled.Circle : Icons.Material.Filled.Warning)" Color="@(_isSetupComplete ? Color.Success : Color.Warning)" Size="Size.Small" />
-                        <MudText Typo="Typo.caption">@(_isSetupComplete ? "System Online" : "Setup erforderlich")</MudText>
-                        <MudDivider Vertical="true" FlexItem="true" Class="mx-2 my-2" Style="border-color: rgba(0,0,0,0.12);" />
-                        <MudText Typo="Typo.caption">API: Verbunden</MudText>
-                        <MudIcon Icon="@Icons.Material.Filled.Api" Color="Color.Success" Size="Size.Small" />
-                    </MudStack>
-                </MudAppBar>
-            </MudLayout>
-        </Authorized>
-        <NotAuthorized>
-            <!-- Lade-Indikator, bis OnInitializedAsync den Redirect durchführt -->
-            <div class="d-flex justify-center align-center flex-column" style="height: 100vh; background-color: #f0f2f5;">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-                <MudText Class="mt-4" Color="Color.Secondary">Sichere Verbindung wird aufgebaut...</MudText>
-            </div>
-        </NotAuthorized>
-    </AuthorizeView>
-</CascadingAuthenticationState>
+    <MudMainContent Class="mud-main-content">
+        <MudContainer MaxWidth="MaxWidth.False" Class="mud-container" Style="padding: 0; margin: 0; height: 100%;">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
 
 <style>
-    .hover-opacity:hover { opacity: 0.7; transition: opacity 0.2s; }
     .mud-main-content { min-height: 100vh; display: flex; flex-direction: column; }
-    /* Fix für PDQ-Seiten, um volle Breite zu nutzen */
     .mud-container { padding-left: 0 !important; padding-right: 0 !important; }
+    
+    /* Globale Suche Styling-Anpassung in Appbar */
+    .global-search .mud-input { color: white !important; }
+    .global-search .mud-input > input::placeholder { color: rgba(255,255,255,0.7) !important; }
+    .global-search .mud-input-outlined-border { border-color: rgba(255,255,255,0.3) !important; }
+    .global-search:hover .mud-input-outlined-border { border-color: white !important; }
 </style>
 
 @code {
@@ -150,101 +93,39 @@
     private bool _isDarkMode = false;
     private MudTheme _theme = new MudTheme();
 
-    private bool _isSetupComplete = true;
-    private bool _isLoadingSetup = true;
-
     private string _userName = "User";
+    private string _userEmail = "";
     private string _userRole = "Reader";
+    private string _userInitials = "U";
+    
+    private string _globalSearchQuery = "";
 
-    // Tenant Management
-    private List<TenantMock> _availableTenants = new();
-    private Guid _currentTenantId;
-    private string _currentTenantName = "Lade Mandant...";
-
-    public class TenantMock { public Guid Id { get; set; } public string Name { get; set; } = ""; }
-    public class LayoutMasterDataDto { public bool IsSetupComplete { get; set; } public string CompanyName { get; set; } = ""; }
-
-    private string AppbarStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.AppbarColor)} !important; color: {ThemeService.Config.AppbarText} !important;";
-    private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : ThemeService.Config.DrawerColor)} !important; color: {(_isDarkMode ? "#c9d1d9" : ThemeService.Config.DrawerText)} !important;";
-    private string MainContentStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.BackgroundColor)}; transition: background-color 0.3s;";
-    private string StatusBarStyle => $"background-color: {(_isDarkMode ? "#161b22" : "#ffffff")}; color: {(_isDarkMode ? "#bdbdbd" : "#424242")}; border-top: 1px solid {(_isDarkMode ? "#30363d" : "#e0e0e0")};";
+    private string AppbarStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.AppbarColor)}; color: {ThemeService.Config.AppbarText};";
+    private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : ThemeService.Config.DrawerColor)};";
 
     protected override async Task OnInitializedAsync()
     {
         UpdateTheme();
         ThemeService.OnThemeChanged += UpdateTheme;
 
-        // AUTHENTIFIZIERUNG PRÜFEN
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
         if (user.Identity?.IsAuthenticated == true)
         {
             _userName = user.Identity.Name ?? "User";
-            _userRole = user.FindFirst(ClaimTypes.Role)?.Value ?? "Reader";
-            
-            var tenantsClaim = user.FindFirst("AllowedTenants")?.Value;
-            if (!string.IsNullOrEmpty(tenantsClaim))
-            {
-                try {
-                    _availableTenants = JsonSerializer.Deserialize<List<TenantMock>>(tenantsClaim) ?? new();
-                } catch { }
-            }
-
-            if (_availableTenants.Any())
-            {
-                _currentTenantId = _availableTenants.First().Id;
-                _currentTenantName = _availableTenants.First().Name;
-                SetTenantHeader(_currentTenantId);
-            }
+            _userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
+            _userRole = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Reader";
+            _userInitials = string.IsNullOrWhiteSpace(_userName) ? "U" : _userName.Substring(0, 1).ToUpper();
         }
-        else
+    }
+
+    private void HandleSearch(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_globalSearchQuery))
         {
-            Nav.NavigateTo("/login");
-            return;
+            Nav.NavigateTo($"/search?q={Uri.EscapeDataString(_globalSearchQuery)}");
         }
-
-        try {
-            var masterData = await Http.GetFromJsonAsync<LayoutMasterDataDto>("api/settings/masterdata");
-            _isSetupComplete = masterData?.IsSetupComplete ?? false;
-        }
-        catch { _isSetupComplete = false; }
-        finally { _isLoadingSetup = false; }
-    }
-
-    private void SwitchTenant(Guid tenantId, string tenantName)
-    {
-        if (_currentTenantId != tenantId)
-        {
-            _currentTenantId = tenantId;
-            _currentTenantName = tenantName;
-            SetTenantHeader(tenantId);
-            Snackbar.Add($"Kontext gewechselt: {tenantName}", Severity.Info);
-            Nav.NavigateTo(Nav.Uri, forceLoad: true);
-        }
-    }
-
-    private void SetTenantHeader(Guid tenantId)
-    {
-        if (Http.DefaultRequestHeaders.Contains("X-Tenant-ID"))
-        {
-            Http.DefaultRequestHeaders.Remove("X-Tenant-ID");
-        }
-        Http.DefaultRequestHeaders.Add("X-Tenant-ID", tenantId.ToString());
-    }
-
-    private async Task Logout()
-    {
-        await AuthStateProvider.MarkUserAsLoggedOut();
-        Nav.NavigateTo("/login");
-    }
-
-    private string GetInitials(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "U";
-        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 1) return parts[0].Substring(0, 1).ToUpper();
-        return (parts[0].Substring(0, 1) + parts[^1].Substring(0, 1)).ToUpper();
     }
 
     private Color GetRoleColor(string role) => role switch {
@@ -253,6 +134,15 @@
         "CI Editor" => Color.Success,
         _ => Color.Info
     };
+
+    private void DrawerToggle() => _drawerOpen = !_drawerOpen;
+
+    private void ToggleDarkMode()
+    {
+        var cfg = ThemeService.Config;
+        cfg.IsDark = !cfg.IsDark;
+        ThemeService.UpdateConfig(cfg);
+    }
 
     private void UpdateTheme()
     {
@@ -264,25 +154,30 @@
         newTheme.PaletteLight.Secondary = cfg.SecondaryColor;
         newTheme.PaletteLight.Background = cfg.BackgroundColor;
         newTheme.PaletteLight.Surface = cfg.SurfaceColor;
-        newTheme.PaletteLight.AppbarBackground = cfg.AppbarColor;
-        newTheme.PaletteLight.AppbarText = cfg.AppbarText;
-        newTheme.PaletteLight.DrawerBackground = cfg.DrawerColor;
-        newTheme.PaletteLight.DrawerText = cfg.DrawerText;
-        newTheme.PaletteLight.DrawerIcon = cfg.DrawerIcon;
         newTheme.PaletteLight.TextPrimary = cfg.TextPrimary;
         newTheme.PaletteLight.ActionDefault = cfg.PrimaryColor;
+        
         newTheme.PaletteDark.Primary = cfg.PrimaryColor;
         newTheme.PaletteDark.Background = "#0d1117"; 
         newTheme.PaletteDark.Surface = "#161b22";
         newTheme.PaletteDark.TextPrimary = "#c9d1d9";
-        newTheme.Typography.Default.FontFamily = new[] { cfg.FontFamily };
-        newTheme.Typography.Default.FontSize = $"{cfg.BaseFontSize}px";
+        newTheme.PaletteDark.ActionDefault = cfg.PrimaryColor;
+        
+        if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
+        {
+            newTheme.Typography.Default.FontFamily = new[] { cfg.FontFamily };
+            newTheme.Typography.Default.FontSize = $"{cfg.BaseFontSize}px";
+        }
         
         _theme = newTheme;
         InvokeAsync(StateHasChanged);
     }
 
-    void DrawerToggle() => _drawerOpen = !_drawerOpen;
-    void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+    private async Task Logout()
+    {
+        await AuthStateProvider.MarkUserAsLoggedOut();
+        Nav.NavigateTo("/login");
+    }
+
     public void Dispose() => ThemeService.OnThemeChanged -= UpdateTheme;
 }
