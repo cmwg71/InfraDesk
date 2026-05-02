@@ -3,6 +3,7 @@
 @using InfraDesk.UI.Web.Components.Layout
 @layout EmptyLayout
 @using InfraDesk.UI.Web.Services
+@using InfraDesk.Core.Entities
 @using MudBlazor
 @using System.Text.Json
 @inject NavigationManager Nav
@@ -23,6 +24,22 @@
 
         <div style="padding: 32px;">
             <MudStack Spacing="4">
+                
+                @* MANDANTEN AUSWAHL (ALLE) *@
+                <MudSelect T="Guid?" Label="Mandant / Organisation" @bind-Value="_selectedTenantId" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Required="true">
+                    @if (_availableTenants == null)
+                    {
+                        <MudSelectItem T="Guid?" Value="null" Disabled="true">Lade Mandanten...</MudSelectItem>
+                    }
+                    else
+                    {
+                        @foreach (var t in _availableTenants)
+                        {
+                            <MudSelectItem T="Guid?" Value="@t.Id">@t.Name</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+
                 <MudTextField @bind-Value="_email" Label="E-Mail Adresse" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" />
                 
                 <MudTextField @bind-Value="_password" Label="Passwort" Variant="Variant.Outlined" InputType="InputType.Password" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock" OnKeyDown="@(async (e) => { if (e.Key == "Enter") await PerformLogin(); })" />
@@ -43,11 +60,36 @@
 @code {
     private string _email = "";
     private string _password = "";
+    private Guid? _selectedTenantId;
     private bool _rememberMe = false;
     private bool _isLoading = false;
 
+    private List<Tenant>? _availableTenants;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _availableTenants = await Http.GetFromJsonAsync<List<Tenant>>("api/tenants");
+            if (_availableTenants != null && _availableTenants.Any())
+            {
+                _selectedTenantId = _availableTenants.First().Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Fehler beim Laden der Mandantenliste.", Severity.Error);
+        }
+    }
+
     private async Task PerformLogin()
     {
+        if (!_selectedTenantId.HasValue)
+        {
+            Snackbar.Add("Bitte wählen Sie einen Mandanten aus.", Severity.Warning);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_password))
         {
             Snackbar.Add("Bitte geben Sie E-Mail und Passwort ein.", Severity.Warning);
@@ -58,7 +100,14 @@
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/auth/login", new { Email = _email, Password = _password });
+            // Die Login-Anfrage inkludiert nun optional die TenantId,
+            // um den Zugriff für diesen Mandanten explizit zu validieren.
+            var response = await Http.PostAsJsonAsync("api/auth/login", new
+            {
+                Email = _email,
+                Password = _password,
+                TenantId = _selectedTenantId
+            });
             
             if (response.IsSuccessStatusCode)
             {
@@ -71,7 +120,7 @@
             }
             else
             {
-                Snackbar.Add("E-Mail oder Passwort ist inkorrekt.", Severity.Error);
+                Snackbar.Add("Anmeldung fehlgeschlagen. Bitte Daten prüfen.", Severity.Error);
             }
         }
         catch (Exception ex)

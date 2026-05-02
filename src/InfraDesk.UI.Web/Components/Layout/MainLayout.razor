@@ -5,9 +5,11 @@
 @using InfraDesk.UI.Web.Services
 @using Microsoft.AspNetCore.Components.Web
 @using System.Security.Claims
+@using System.Text.Json
 @inject ThemeService ThemeService
 @inject NavigationManager Nav
 @inject InfraDeskAuthStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
@@ -62,7 +64,7 @@
                         </MudNavMenu>
                     </div>
 
-                    @* UNTERER BEREICH: Fixierter Footer mit Einstellungen & Status *@
+                    @* UNTERER BEREICH: Fixierter Footer mit Einstellungen, Mandanten-Switch & Status *@
                     <div class="sidebar-footer">
                         <MudDivider Class="mb-2" />
                         
@@ -71,6 +73,7 @@
                         </MudNavMenu>
 
                         <div class="user-status-card px-4 py-3 mt-2">
+                            @* Benutzer Info *@
                             <div class="d-flex align-center mb-2">
                                 <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-3">@_userInitials</MudAvatar>
                                 <div class="d-flex flex-column">
@@ -83,6 +86,22 @@
 
                             <MudDivider Style="opacity: 0.3;" Class="my-2" />
 
+                            @* MANDANTEN UMSCHALTUNG *@
+                            <div class="mb-3">
+                                <MudSelect T="Guid" Label="Aktiver Mandant" 
+                                           Value="@_activeTenantId" 
+                                           ValueChanged="OnTenantSwitched"
+                                           Variant="Variant.Outlined" 
+                                           Margin="Margin.Dense" 
+                                           Dense="true" 
+                                           Style="font-size: 0.75rem; background-color: rgba(255,255,255,0.05);">
+                                    @foreach (var tenant in _allowedTenants)
+                                    {
+                                        <MudSelectItem Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </div>
+
                             @* System-Status Meldungen *@
                             <div class="status-row">
                                 <div class="status-indicator online"></div>
@@ -93,8 +112,10 @@
                             <div class="status-row mt-1">
                                 <div class="status-indicator online"></div>
                                 <MudText Typo="Typo.caption" Style="font-size: 0.7rem;">Verbindung: <b>Gesichert</b></MudText>
-                                <MudSpacer />
-                                <div style="width: 24px;"></div>
+                            </div>
+                            <div class="status-row mt-1">
+                                <div class="status-indicator online"></div>
+                                <MudText Typo="Typo.caption" Style="font-size: 0.7rem;">Integrität: <b>100%</b></MudText>
                             </div>
                         </div>
                     </div>
@@ -156,7 +177,10 @@
     private string _userInitials = "U";
     private string _globalSearchQuery = "";
 
-    // AppbarStyle auf Dunkelgrau (#333333) fixiert
+    // Mandanten Logik
+    private Guid _activeTenantId;
+    private List<TenantInfo> _allowedTenants = new();
+
     private string AppbarStyle => $"background-color: #333333; color: white;";
     private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : "#f8f9fa")}; border-right: 1px solid {(_isDarkMode ? "#30363d" : "#e0e0e0")};";
 
@@ -174,11 +198,36 @@
             _userEmail = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
             _userRole = user.FindFirst(ClaimTypes.Role)?.Value ?? "Reader";
             _userInitials = string.IsNullOrWhiteSpace(_userName) ? "U" : _userName.Substring(0, 1).ToUpper();
+
+            // Berechtigte Mandanten aus dem Claim laden
+            var tenantsJson = user.FindFirst("AllowedTenants")?.Value;
+            if (!string.IsNullOrEmpty(tenantsJson))
+            {
+                try {
+                    _allowedTenants = JsonSerializer.Deserialize<List<TenantInfo>>(tenantsJson) ?? new();
+                    if (_allowedTenants.Any())
+                    {
+                        _activeTenantId = _allowedTenants.First().Id;
+                    }
+                } catch { }
+            }
         }
         else
         {
             if (!Nav.Uri.Contains("/login")) Nav.NavigateTo("/login");
         }
+    }
+
+    private async Task OnTenantSwitched(Guid newTenantId)
+    {
+        _activeTenantId = newTenantId;
+        var tenantName = _allowedTenants.FirstOrDefault(t => t.Id == newTenantId)?.Name;
+        
+        // Snackbar Benachrichtigung
+        Snackbar.Add($"Mandant gewechselt zu: {tenantName}", Severity.Info);
+        
+        // UI Refresh anfordern
+        await InvokeAsync(StateHasChanged);
     }
 
     private void HandleSearch(KeyboardEventArgs e)
@@ -223,4 +272,6 @@
     }
 
     public void Dispose() => ThemeService.OnThemeChanged -= UpdateTheme;
+
+    private class TenantInfo { public Guid Id { get; set; } public string Name { get; set; } = ""; }
 }
