@@ -10,29 +10,32 @@
 <PageTitle>InfraDesk - Dashboard</PageTitle>
 
 <style>
-    /* Korrektur: Die Höhe wird nun dynamisch berechnet, um Platz für die AppBar zu lassen */
-    .pdq-container { background-color: #f4f4f4; min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
+    .pdq-container { background-color: #f4f4f4; display: flex; flex-direction: column; min-height: 100%; }
     .pdq-toolbar { height: 48px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 16px; flex-shrink: 0; }
     .pdq-content { flex-grow: 1; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
     
-    .section-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .section-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 100%; }
     .section-header-compact { background-color: #e0e0e0; padding: 8px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #333; border-bottom: 1px solid #ccc; }
     
-    .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 24px; text-align: center; flex: 1; background: #fff; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
+    /* Kachel Styling mit relativer Positionierung für die Buttons */
+    .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 24px; text-align: center; flex: 1; background: #fff; position: relative !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
     .stat-card:hover { transform: translateY(-2px); background-color: #fafafa; }
     .stat-value { font-size: 2.5rem; font-weight: bold; line-height: 1; }
     .stat-label { font-size: 0.85rem; color: #666; text-transform: uppercase; font-weight: bold; margin-top: 8px; }
     
-    .activity-row { padding: 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; }
+    .activity-row { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; min-height: 54px; }
     .activity-row:last-child { border-bottom: none; }
+
+    /* Fixierte Position für den Quick-Add Button oben rechts in der Kachel */
+    .quick-add-btn { position: absolute !important; top: 4px !important; right: 4px !important; z-index: 100 !important; }
 </style>
 
 <div class="pdq-container">
     <div class="pdq-toolbar">
         <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-        <MudText Typo="Typo.body2" Class="font-weight-bold">Enterprise Leitstand</MudText>
+        <MudText Typo="Typo.body2" Class="font-weight-bold">InfraDesk Dashboard</MudText>
         <MudSpacer />
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDashboardData" Style="background: white;">Aktualisieren</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDashboardData" Style="background: white; text-transform:none;">Aktualisieren</MudButton>
     </div>
 
     <div class="pdq-content">
@@ -44,26 +47,29 @@
         {
             <!-- STATISTIK KACHELN -->
             <div class="d-flex gap-4">
+                @* Kachel: Gesamt-Assets mit Quick-Add *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-primary);" @onclick="@(() => Nav.NavigateTo("/assets"))">
-                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Inherit"
-                                   Style="position: absolute; top: 8px; right: 8px;"
-                                   OnClick="@((e) => { Nav.NavigateTo("/assets/create"); })"
-                                   @onclick:stopPropagation="true" />
+                    <MudTooltip Text="Schnellanlage: Neues Asset">
+                        <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Size="Size.Medium" Class="quick-add-btn" 
+                                       OnClick="@((e) => Nav.NavigateTo("/assets/create"))" OnClick:stopPropagation="true" />
+                    </MudTooltip>
                     <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Large" />
                     <div class="stat-value">@_assetsCount</div>
                     <div class="stat-label">Gesamt-Assets</div>
                 </div>
 
+                @* Kachel: Offene Tickets mit Quick-Add *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-error);" @onclick="@(() => Nav.NavigateTo("/tickets"))">
-                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Inherit"
-                                   Style="position: absolute; top: 8px; right: 8px;"
-                                   OnClick="@((e) => { Nav.NavigateTo("/tickets/create"); })"
-                                   @onclick:stopPropagation="true" />
+                    <MudTooltip Text="Schnellanlage: Neues Ticket">
+                        <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Error" Size="Size.Medium" Class="quick-add-btn" 
+                                       OnClick="@((e) => Nav.NavigateTo("/tickets/create"))" OnClick:stopPropagation="true" />
+                    </MudTooltip>
                     <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" />
                     <div class="stat-value" style="color: var(--mud-palette-error);">@_openTicketsCount</div>
                     <div class="stat-label">Offene Tickets</div>
                 </div>
 
+                @* Kachel: System-Integrität *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-success);">
                     <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Large" />
                     <div class="stat-value" style="color: var(--mud-palette-success);">100%</div>
@@ -71,32 +77,77 @@
                 </div>
             </div>
 
-            <!-- JOURNAL -->
-            <div class="section-box">
-                <div class="section-header-compact">Letzte Aktivitäten</div>
-                <div class="d-flex flex-column">
-                    @if (_recentActivities.Any())
-                    {
-                        @foreach (var act in _recentActivities.Take(5))
-                        {
-                            <div class="activity-row">
-                                <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Color="Color.Info" />
-                                <div class="d-flex flex-column flex-grow-1">
-                                    <div class="d-flex justify-space-between">
-                                        <MudLink Href="@($"/tickets/{act.TicketId}")" Typo="Typo.body2" Class="font-weight-bold">#@act.TicketNumber - @act.TicketTitle</MudLink>
-                                        <span style="font-size: 0.75rem; color: #888;">@ThemeService.FormatDate(act.Timestamp)</span>
+            <!-- DUAL VIEW: TICKET VERLAUF & ASSET VERLAUF -->
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    <div class="section-box">
+                        <div class="section-header-compact">Ticket Verlauf</div>
+                        <div class="d-flex flex-column">
+                            @if (_recentTickets != null && _recentTickets.Any())
+                            {
+                                @foreach (var ticket in _recentTickets)
+                                {
+                                    <div class="activity-row">
+                                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Small" Color="Color.Info" />
+                                        <div class="d-flex flex-column flex-grow-1">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudLink Href="@($"/tickets/{ticket.Id}")" Typo="Typo.body2" Class="font-weight-bold" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
+                                                    #@ticket.TicketNumber - @ticket.Title
+                                                </MudLink>
+                                                <span style="font-size: 0.72rem; color: #888;">@ThemeService.FormatDate(ticket.CreatedAt)</span>
+                                            </div>
+                                            <div class="d-flex align-center">
+                                                <span style="font-size: 0.75rem; color: #666;">Status: <b>@ticket.Status</b></span>
+                                                <MudSpacer />
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@(ticket.Priority == "Hoch" ? Color.Error : Color.Default)" Class="ma-0 pa-0" Style="font-size: 0.7rem; height: 18px;">@ticket.Priority</MudChip>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <span style="font-size: 0.8rem; color: #555;"><strong>@act.AuthorName:</strong> @act.Content</span>
-                                </div>
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <div class="pa-4 text-center" style="color: #888;">Keine aktuellen Aktivitäten.</div>
-                    }
-                </div>
-            </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="pa-8 text-center" style="color: #888;">Keine aktiven Tickets vorhanden.</div>
+                            }
+                        </div>
+                    </div>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <div class="section-box">
+                        <div class="section-header-compact">Asset Verlauf</div>
+                        <div class="d-flex flex-column">
+                            @if (_recentAssets != null && _recentAssets.Any())
+                            {
+                                @foreach (var asset in _recentAssets)
+                                {
+                                    <div class="activity-row">
+                                        <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Small" Color="Color.Success" />
+                                        <div class="d-flex flex-column flex-grow-1">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudLink Href="@($"/assets/{asset.Id}")" Typo="Typo.body2" Class="font-weight-bold">
+                                                    @asset.Name (@asset.AssetTag)
+                                                </MudLink>
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Style="font-size: 0.65rem; height: 18px;">@asset.LifecycleStatus</MudChip>
+                                            </div>
+                                            <div class="d-flex align-center mt-1">
+                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="font-size: 0.8rem; opacity: 0.6;" />
+                                                <span style="font-size: 0.75rem; color: #666;">@(asset.Owner != null ? $"{asset.Owner.FirstName} {asset.Owner.LastName}" : "Nicht zugewiesen")</span>
+                                                <MudSpacer />
+                                                <span style="font-size: 0.72rem; color: #888;">S/N: @(asset.SerialNumber ?? "---")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="pa-8 text-center" style="color: #888;">Keine aktuellen Asset-Änderungen vorhanden.</div>
+                            }
+                        </div>
+                    </div>
+                </MudItem>
+            </MudGrid>
         }
     </div>
 </div>
@@ -105,9 +156,9 @@
     private bool _isLoading = true;
     private int _assetsCount = 0;
     private int _openTicketsCount = 0;
-    private List<ActivityDto> _recentActivities = new();
-
-    public class ActivityDto { public Guid TicketId { get; set; } public long TicketNumber { get; set; } public string TicketTitle { get; set; } = ""; public string AuthorName { get; set; } = ""; public string Content { get; set; } = ""; public DateTime Timestamp { get; set; } }
+    
+    private List<Ticket> _recentTickets = new();
+    private List<Asset> _recentAssets = new();
 
     protected override async Task OnInitializedAsync() => await LoadDashboardData();
 
@@ -116,13 +167,28 @@
         _isLoading = true;
         try
         {
-            var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
-            _assetsCount = assets?.Count ?? 0;
-            var tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets");
-            _openTicketsCount = tickets?.Count(t => t.Status != "GESCHLOSSEN") ?? 0;
-            _recentActivities = await Http.GetFromJsonAsync<List<ActivityDto>>("api/tickets/recent-activities") ?? new();
+            // 1. Assets laden
+            var allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new();
+            _assetsCount = allAssets.Count;
+            
+            // Asset Verlauf: Letzte 5 Assets (basierend auf ID/Anlage)
+            _recentAssets = allAssets.OrderByDescending(a => a.Id).Take(5).ToList();
+
+            // 2. Tickets laden
+            var allTickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets") ?? new();
+            _openTicketsCount = allTickets.Count(t => t.Status != "GESCHLOSSEN");
+
+            // Ticket Verlauf: Letzte 5 nicht geschlossene Tickets
+            _recentTickets = allTickets
+                .Where(t => t.Status != "GESCHLOSSEN")
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(5)
+                .ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Dashboard Data Error: {ex.Message}");
+        }
         finally { _isLoading = false; }
     }
 }
