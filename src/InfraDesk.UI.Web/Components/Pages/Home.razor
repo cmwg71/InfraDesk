@@ -17,7 +17,7 @@
     .section-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 100%; }
     .section-header-compact { background-color: #e0e0e0; padding: 8px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #333; border-bottom: 1px solid #ccc; }
     
-    /* Kachel Styling mit relativer Positionierung für die Buttons */
+    /* Kachel Styling */
     .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 24px; text-align: center; flex: 1; background: #fff; position: relative !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
     .stat-card:hover { transform: translateY(-2px); background-color: #fafafa; }
     .stat-value { font-size: 2.5rem; font-weight: bold; line-height: 1; }
@@ -26,8 +26,14 @@
     .activity-row { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; min-height: 54px; }
     .activity-row:last-child { border-bottom: none; }
 
-    /* Fixierte Position für den Quick-Add Button oben rechts in der Kachel */
-    .quick-add-btn { position: absolute !important; top: 4px !important; right: 4px !important; z-index: 100 !important; }
+    /* Quick-Add Button Fix: Erhöhte Priorität und Sichtbarkeit */
+    .quick-add-btn { position: absolute !important; top: 8px !important; right: 8px !important; z-index: 100 !important; background-color: rgba(255,255,255,0.8) !important; border-radius: 50%; }
+    .quick-add-btn:hover { background-color: #fff !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+    /* ITIL-Breakdown in der Ticket-Kachel */
+    .prio-breakdown { display: flex; justify-content: center; gap: 12px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #eee; }
+    .prio-item { display: flex; align-items: center; gap: 4px; }
+    .prio-count { font-size: 0.85rem; font-weight: 800; }
 </style>
 
 <div class="pdq-container">
@@ -47,7 +53,7 @@
         {
             <!-- STATISTIK KACHELN -->
             <div class="d-flex gap-4">
-                @* Kachel: Gesamt-Assets mit Quick-Add *@
+                @* Kachel: Gesamt-Assets *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-primary);" @onclick="@(() => Nav.NavigateTo("/assets"))">
                     <MudTooltip Text="Schnellanlage: Neues Asset">
                         <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Size="Size.Medium" Class="quick-add-btn" 
@@ -58,7 +64,7 @@
                     <div class="stat-label">Gesamt-Assets</div>
                 </div>
 
-                @* Kachel: Offene Tickets mit Quick-Add *@
+                @* Kachel: Offene Tickets mit ITIL-Breakdown (Blitz, Wagen, etc.) *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-error);" @onclick="@(() => Nav.NavigateTo("/tickets"))">
                     <MudTooltip Text="Schnellanlage: Neues Ticket">
                         <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Error" Size="Size.Medium" Class="quick-add-btn" 
@@ -67,6 +73,34 @@
                     <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" />
                     <div class="stat-value" style="color: var(--mud-palette-error);">@_openTicketsCount</div>
                     <div class="stat-label">Offene Tickets</div>
+
+                    <!-- Aufteilung nach Ticket-Typen (Symbole aus Ticket-System) -->
+                    <div class="prio-breakdown">
+                        <MudTooltip Text="Incidents (Störungen)">
+                            <div class="prio-item">
+                                <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Error" Size="Size.Small" />
+                                <span class="prio-count" style="color: var(--mud-palette-error);">@_incidentCount</span>
+                            </div>
+                        </MudTooltip>
+                        <MudTooltip Text="Service Requests">
+                            <div class="prio-item">
+                                <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Color="Color.Info" Size="Size.Small" />
+                                <span class="prio-count" style="color: var(--mud-palette-info);">@_requestCount</span>
+                            </div>
+                        </MudTooltip>
+                        <MudTooltip Text="Changes (Änderungen)">
+                            <div class="prio-item">
+                                <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Warning" Size="Size.Small" />
+                                <span class="prio-count" style="color: var(--mud-palette-warning);">@_changeCount</span>
+                            </div>
+                        </MudTooltip>
+                        <MudTooltip Text="Probleme">
+                            <div class="prio-item">
+                                <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Dark" Size="Size.Small" />
+                                <span class="prio-count" style="color: #444;">@_problemCount</span>
+                            </div>
+                        </MudTooltip>
+                    </div>
                 </div>
 
                 @* Kachel: System-Integrität *@
@@ -88,7 +122,8 @@
                                 @foreach (var ticket in _recentTickets)
                                 {
                                     <div class="activity-row">
-                                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Small" Color="Color.Info" />
+                                        @* Hier ebenfalls die ITIL-Icons für den Verlauf *@
+                                        <MudIcon Icon="@GetItilIcon(ticket.Category1)" Size="Size.Small" Color="@GetItilColor(ticket.Category1)" />
                                         <div class="d-flex flex-column flex-grow-1">
                                             <div class="d-flex justify-space-between align-center">
                                                 <MudLink Href="@($"/tickets/{ticket.Id}")" Typo="Typo.body2" Class="font-weight-bold" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
@@ -156,6 +191,12 @@
     private bool _isLoading = true;
     private int _assetsCount = 0;
     private int _openTicketsCount = 0;
+
+    // Zähler für ITIL-Kategorien (als "Kritikalität" im Dashboard)
+    private int _incidentCount = 0;
+    private int _requestCount = 0;
+    private int _changeCount = 0;
+    private int _problemCount = 0;
     
     private List<Ticket> _recentTickets = new();
     private List<Asset> _recentAssets = new();
@@ -170,17 +211,22 @@
             // 1. Assets laden
             var allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new();
             _assetsCount = allAssets.Count;
-            
-            // Asset Verlauf: Letzte 5 Assets (basierend auf ID/Anlage)
             _recentAssets = allAssets.OrderByDescending(a => a.Id).Take(5).ToList();
 
             // 2. Tickets laden
             var allTickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets") ?? new();
-            _openTicketsCount = allTickets.Count(t => t.Status != "GESCHLOSSEN");
+            var openTickets = allTickets.Where(t => t.Status != "GESCHLOSSEN").ToList();
+            
+            _openTicketsCount = openTickets.Count;
 
-            // Ticket Verlauf: Letzte 5 nicht geschlossene Tickets
-            _recentTickets = allTickets
-                .Where(t => t.Status != "GESCHLOSSEN")
+            // Aufteilung nach ITIL-Kategorien berechnen (identisch zum Ticket System)
+            _incidentCount = openTickets.Count(t => t.Category1 == "Incident (Störung)");
+            _requestCount = openTickets.Count(t => t.Category1 == "Service Request (Serviceanfrage)");
+            _changeCount = openTickets.Count(t => t.Category1 == "Change (Änderung)");
+            _problemCount = openTickets.Count(t => t.Category1 == "Problem (Problem)");
+
+            // Ticket Verlauf
+            _recentTickets = openTickets
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(5)
                 .ToList();
@@ -191,4 +237,20 @@
         }
         finally { _isLoading = false; }
     }
+
+    private string GetItilIcon(string? category) => category switch {
+        "Incident (Störung)" => Icons.Material.Filled.Bolt,
+        "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart,
+        "Change (Änderung)" => Icons.Material.Filled.Settings,
+        "Problem (Problem)" => Icons.Material.Filled.Search,
+        _ => Icons.Material.Filled.Label
+    };
+
+    private Color GetItilColor(string? category) => category switch {
+        "Incident (Störung)" => Color.Error,
+        "Service Request (Serviceanfrage)" => Color.Info,
+        "Change (Änderung)" => Color.Warning,
+        "Problem (Problem)" => Color.Dark,
+        _ => Color.Default
+    };
 }
