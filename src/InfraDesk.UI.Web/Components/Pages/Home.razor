@@ -10,102 +10,82 @@
 <PageTitle>InfraDesk - Dashboard</PageTitle>
 
 <style>
-    /* PDQ Enterprise Style Layout */
-    .pdq-container { background-color: #f4f4f4; height: calc(100vh - 100px); display: flex; flex-direction: column; overflow: hidden; }
-    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
-    .pdq-content { flex-grow: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    /* Korrektur: Die Höhe wird nun dynamisch berechnet, um Platz für die AppBar zu lassen */
+    .pdq-container { background-color: #f4f4f4; min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
+    .pdq-toolbar { height: 48px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 16px; flex-shrink: 0; }
+    .pdq-content { flex-grow: 1; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
     
-    .section-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
-    .section-header-compact { background-color: #e0e0e0; padding: 6px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #333; display: flex; align-items: center; border-bottom: 1px solid #ccc; justify-content: space-between; }
+    .section-box { border: 1px solid #ccc; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .section-header-compact { background-color: #e0e0e0; padding: 8px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #333; border-bottom: 1px solid #ccc; }
     
-    .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 20px; text-align: center; flex: 1; background: #fff; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: background-color 0.2s; }
-    .stat-card:hover { background-color: #f9f9f9; }
-    .stat-value { font-size: 2.2rem; font-weight: bold; margin-bottom: 4px; line-height: 1.1; }
-    .stat-label { font-size: 0.8rem; color: #555; text-transform: uppercase; font-weight: bold; }
+    .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 24px; text-align: center; flex: 1; background: #fff; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
+    .stat-card:hover { transform: translateY(-2px); background-color: #fafafa; }
+    .stat-value { font-size: 2.5rem; font-weight: bold; line-height: 1; }
+    .stat-label { font-size: 0.85rem; color: #666; text-transform: uppercase; font-weight: bold; margin-top: 8px; }
     
-    .activity-row { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: flex-start; gap: 12px; transition: background-color 0.2s; }
-    .activity-row:hover { background-color: #fcfcfc; }
+    .activity-row { padding: 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; }
     .activity-row:last-child { border-bottom: none; }
 </style>
 
-<div class="pdq-toolbar">
-    <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-    <MudText Typo="Typo.body2" Class="font-weight-bold">InfraDesk Zentrale</MudText>
-    <MudSpacer />
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDashboardData" Style="background: white;">Aktualisieren</MudButton>
-</div>
-
 <div class="pdq-container">
+    <div class="pdq-toolbar">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+        <MudText Typo="Typo.body2" Class="font-weight-bold">Enterprise Leitstand</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDashboardData" Style="background: white;">Aktualisieren</MudButton>
+    </div>
+
     <div class="pdq-content">
         @if (_isLoading)
         {
-            <div class="d-flex justify-center align-center" style="height: 100%;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            <div class="d-flex justify-center align-center" style="height: 300px;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
         }
         else
         {
-            <!-- KACHELN (OBEN INTEGRIERT) -->
+            <!-- STATISTIK KACHELN -->
             <div class="d-flex gap-4">
-                <!-- Assets Kachel -->
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-primary);" @onclick="@(() => Nav.NavigateTo("/assets"))">
-                    <div @onclick:stopPropagation="true" style="position: absolute; top: 4px; right: 4px;">
-                        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/assets/create"))" Title="Neues Asset" />
-                    </div>
-                    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Large" />
                     <div class="stat-value">@_assetsCount</div>
-                    <div class="stat-label">Assets in CMDB</div>
+                    <div class="stat-label">Gesamt-Assets</div>
                 </div>
 
-                <!-- Offene Tickets Kachel -->
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-error);" @onclick="@(() => Nav.NavigateTo("/tickets"))">
-                    <div @onclick:stopPropagation="true" style="position: absolute; top: 4px; right: 4px;">
-                        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Error" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/tickets/create"))" Title="Neues Ticket" />
-                    </div>
-                    <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" Class="mb-2" />
+                    <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" />
                     <div class="stat-value" style="color: var(--mud-palette-error);">@_openTicketsCount</div>
                     <div class="stat-label">Offene Tickets</div>
                 </div>
 
-                <!-- System Status Kachel -->
-                <div class="stat-card" style="border-top: 4px solid var(--mud-palette-success); cursor: default;" @onclick:stopPropagation="true">
-                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" Class="mb-2" />
-                    <div class="stat-value" style="color: var(--mud-palette-success); font-size: 1.6rem; margin-top: 6px;">OPTIMAL</div>
-                    <div class="stat-label mt-2">System Integrität</div>
+                <div class="stat-card" style="border-top: 4px solid var(--mud-palette-success);">
+                    <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Large" />
+                    <div class="stat-value" style="color: var(--mud-palette-success);">100%</div>
+                    <div class="stat-label">Integrität</div>
                 </div>
             </div>
 
-            <!-- LETZTE EREIGNISSE (MAX 5) -->
-            <div class="section-box mt-2">
-                <div class="section-header-compact">
-                    <div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="mr-2"/>Journal: Letzte Ereignisse</div>
-                </div>
+            <!-- JOURNAL -->
+            <div class="section-box">
+                <div class="section-header-compact">Letzte Aktivitäten</div>
                 <div class="d-flex flex-column">
                     @if (_recentActivities.Any())
                     {
-                        // Begrenzung auf exakt 5 Einträge für eine kompakte Ansicht
                         @foreach (var act in _recentActivities.Take(5))
                         {
                             <div class="activity-row">
-                                <MudIcon Icon="@(act.Type == "System" ? Icons.Material.Filled.Settings : Icons.Material.Filled.Comment)" Color="@(act.Type == "System" ? Color.Default : Color.Primary)" Size="Size.Small" Class="mt-1" />
-                                <div class="d-flex flex-column w-100">
-                                    <div class="d-flex justify-space-between align-center">
-                                        <MudLink Href="@($"/tickets/{act.TicketId}")" Color="Color.Default" Underline="Underline.Hover" Typo="Typo.body2" Class="font-weight-bold">
-                                            #@act.TicketNumber - @act.TicketTitle
-                                        </MudLink>
-                                        <span style="font-size: 0.75rem; color: #888;">@ThemeService.FormatDate(act.Timestamp, "dd.MM.yyyy HH:mm")</span>
+                                <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Color="Color.Info" />
+                                <div class="d-flex flex-column flex-grow-1">
+                                    <div class="d-flex justify-space-between">
+                                        <MudLink Href="@($"/tickets/{act.TicketId}")" Typo="Typo.body2" Class="font-weight-bold">#@act.TicketNumber - @act.TicketTitle</MudLink>
+                                        <span style="font-size: 0.75rem; color: #888;">@ThemeService.FormatDate(act.Timestamp)</span>
                                     </div>
-                                    <div class="d-flex align-center mt-1" style="font-size: 0.8rem;">
-                                        <strong style="color: var(--mud-palette-primary); margin-right: 6px;">@act.AuthorName:</strong>
-                                        <span style="color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 800px;">
-                                            @GetPlainText(act.Content)
-                                        </span>
-                                    </div>
+                                    <span style="font-size: 0.8rem; color: #555;"><strong>@act.AuthorName:</strong> @act.Content</span>
                                 </div>
                             </div>
                         }
                     }
                     else
                     {
-                        <div class="pa-4" style="color: #888; font-size: 0.85rem;">Keine aktuellen Ereignisse im Journal gefunden.</div>
+                        <div class="pa-4 text-center" style="color: #888;">Keine aktuellen Aktivitäten.</div>
                     }
                 </div>
             </div>
@@ -117,23 +97,11 @@
     private bool _isLoading = true;
     private int _assetsCount = 0;
     private int _openTicketsCount = 0;
-    
     private List<ActivityDto> _recentActivities = new();
 
-    public class ActivityDto {
-        public Guid TicketId { get; set; }
-        public long TicketNumber { get; set; }
-        public string TicketTitle { get; set; } = "";
-        public string AuthorName { get; set; } = "";
-        public string Content { get; set; } = "";
-        public DateTime Timestamp { get; set; }
-        public string Type { get; set; } = "";
-    }
+    public class ActivityDto { public Guid TicketId { get; set; } public long TicketNumber { get; set; } public string TicketTitle { get; set; } = ""; public string AuthorName { get; set; } = ""; public string Content { get; set; } = ""; public DateTime Timestamp { get; set; } }
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadDashboardData();
-    }
+    protected override async Task OnInitializedAsync() => await LoadDashboardData();
 
     private async Task LoadDashboardData()
     {
@@ -142,30 +110,11 @@
         {
             var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
             _assetsCount = assets?.Count ?? 0;
-
             var tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets");
-            if (tickets != null)
-            {
-                _openTicketsCount = tickets.Count(t => t.Status != "GESCHLOSSEN");
-            }
-
-            var acts = await Http.GetFromJsonAsync<List<ActivityDto>>("api/tickets/recent-activities");
-            if (acts != null) _recentActivities = acts;
+            _openTicketsCount = tickets?.Count(t => t.Status != "GESCHLOSSEN") ?? 0;
+            _recentActivities = await Http.GetFromJsonAsync<List<ActivityDto>>("api/tickets/recent-activities") ?? new();
         }
-        catch (Exception)
-        {
-            // Logging
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
-
-    private string GetPlainText(string html)
-    {
-        if (string.IsNullOrEmpty(html)) return "";
-        var text = System.Text.RegularExpressions.Regex.Replace(html, "<.*?>", String.Empty);
-        return text.Replace("&rarr;", "->").Replace("&nbsp;", " ").Trim();
+        catch { }
+        finally { _isLoading = false; }
     }
 }

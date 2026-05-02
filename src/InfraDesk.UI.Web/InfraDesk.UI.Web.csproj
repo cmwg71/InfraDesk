@@ -12,8 +12,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyVersion>2026.5.2.108</AssemblyVersion>
-    <FileVersion>2026.5.2.108</FileVersion>
+    <AssemblyVersion>2026.5.2.114</AssemblyVersion>
+    <FileVersion>2026.5.2.114</FileVersion>
   </PropertyGroup>
 
 </Project>

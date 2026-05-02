@@ -4,10 +4,10 @@
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
 @using Microsoft.AspNetCore.Components.Web
+@using System.Security.Claims
 @inject ThemeService ThemeService
 @inject NavigationManager Nav
 @inject InfraDeskAuthStateProvider AuthStateProvider
-@inject HttpClient Http
 @implements IDisposable
 
 <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
@@ -15,93 +15,150 @@
 <MudSnackbarProvider />
 <MudPopoverProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1" Style="@AppbarStyle">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-        <img src="InfraDesk_Logo.png" alt="InfraDesk Logo" style="height: 48px; margin-left: 8px; object-fit: contain; display: block; filter: brightness(0) invert(1);" />
-        
-        <MudSpacer />
-        
-        <!-- GLOBALE SUCHE (Leitet nun auf die Suchergebnis-Seite weiter) -->
-        <MudTextField @bind-Value="_globalSearchQuery" 
-                      Placeholder="Globale Suche (Enter)..." 
-                      Variant="Variant.Outlined" 
-                      Margin="Margin.Dense" 
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      AdornmentColor="Color.Inherit"
-                      OnKeyDown="HandleSearch"
-                      Immediate="true"
-                      Style="background-color: rgba(255,255,255,0.15); border-radius: 4px; width: 350px; color: white;" 
-                      Class="mr-4 mt-2 mb-2 global-search" />
+<AuthorizeView>
+    <Authorized>
+        <MudLayout>
+            @* OBERE TITELLEISTE: Dunkelgrau mit Logo links und Suche rechts *@
+            <MudAppBar Elevation="1" Style="@AppbarStyle" Fixed="true">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@DrawerToggle" />
+                
+                @* Logo Links *@
+                <img src="InfraDesk_Logo.png" alt="InfraDesk Logo" class="header-logo ml-2" />
+                
+                <MudSpacer />
+                
+                @* Globale Suche Rechts *@
+                <div class="header-search-container">
+                    <MudTextField T="string"
+                                  @bind-Value="_globalSearchQuery" 
+                                  Placeholder="Globale Suche (Enter)..." 
+                                  Variant="Variant.Outlined" 
+                                  Margin="Margin.Dense" 
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  AdornmentColor="Color.Inherit"
+                                  OnKeyDown="@HandleSearch"
+                                  Immediate="true"
+                                  Class="header-search-input" />
+                </div>
 
-        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleDarkMode" Title="Design umschalten" />
-        
-        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="ml-2">
-            <ActivatorContent>
-                <MudAvatar Color="Color.Secondary" Size="Size.Medium" Class="cursor-pointer font-weight-bold">@_userInitials</MudAvatar>
-            </ActivatorContent>
-            <ChildContent>
-                <div class="px-4 py-3" style="min-width: 220px;">
-                    <MudText Typo="Typo.subtitle2" Class="font-weight-bold">@_userName</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_userEmail</MudText>
-                    <div class="mt-2">
-                        <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(_userRole)" Variant="Variant.Filled">@_userRole</MudChip>
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="@ToggleDarkMode" Class="ml-2" />
+            </MudAppBar>
+
+            <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Style="@DrawerStyle" Width="300px">
+                <div class="sidebar-wrapper">
+                    
+                    @* OBERER BEREICH: Navigation *@
+                    <div class="sidebar-content">
+                        <MudNavMenu Margin="Margin.Dense" Class="mt-4">
+                            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                            <MudNavGroup Title="Support" Icon="@Icons.Material.Filled.HeadsetMic" Expanded="true">
+                                <MudNavLink Href="tickets" Icon="@Icons.Material.Filled.ConfirmationNumber">Ticket-Queue</MudNavLink>
+                            </MudNavGroup>
+                            <MudNavGroup Title="Infrastruktur" Icon="@Icons.Material.Filled.Computer" Expanded="true">
+                                <MudNavLink Href="assets" Icon="@Icons.Material.Filled.Dns">Asset-CMDB</MudNavLink>
+                                <MudNavLink Href="ipam" Icon="@Icons.Material.Filled.Router">IPAM / Netzwerke</MudNavLink>
+                            </MudNavGroup>
+                        </MudNavMenu>
+                    </div>
+
+                    @* UNTERER BEREICH: Fixierter Footer mit Einstellungen & Status *@
+                    <div class="sidebar-footer">
+                        <MudDivider Class="mb-2" />
+                        
+                        <MudNavMenu Margin="Margin.Dense">
+                            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings" IconColor="Color.Primary">Einstellungen</MudNavLink>
+                        </MudNavMenu>
+
+                        <div class="user-status-card px-4 py-3 mt-2">
+                            <div class="d-flex align-center mb-2">
+                                <MudAvatar Color="Color.Secondary" Size="Size.Small" Class="mr-3">@_userInitials</MudAvatar>
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.caption" Class="font-weight-bold">@_userName</MudText>
+                                    <MudText Typo="Typo.caption" Style="font-size: 0.65rem; opacity: 0.7;">@_userRole</MudText>
+                                </div>
+                                <MudSpacer />
+                                <MudIconButton Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Color="Color.Error" OnClick="@Logout" />
+                            </div>
+
+                            <MudDivider Style="opacity: 0.3;" Class="my-2" />
+
+                            @* System-Status Meldungen *@
+                            <div class="status-row">
+                                <div class="status-indicator online"></div>
+                                <MudText Typo="Typo.caption" Style="font-size: 0.7rem;">API: <b>Online</b></MudText>
+                                <MudSpacer />
+                                <MudText Typo="Typo.caption" Style="font-size: 0.7rem; opacity: 0.5;">v2026.5</MudText>
+                            </div>
+                            <div class="status-row mt-1">
+                                <div class="status-indicator online"></div>
+                                <MudText Typo="Typo.caption" Style="font-size: 0.7rem;">Verbindung: <b>Gesichert</b></MudText>
+                                <MudSpacer />
+                                <div style="width: 24px;"></div> @* Platzhalter für Optik *@
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <MudDivider />
-                <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/settings">Einstellungen</MudMenuItem>
-                <MudDivider />
-                <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout" style="color: var(--mud-palette-error);">Abmelden</MudMenuItem>
-            </ChildContent>
-        </MudMenu>
-    </MudAppBar>
+            </MudDrawer>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Docked" Style="@DrawerStyle">
-        <MudNavMenu Margin="Margin.Dense" Class="mt-4">
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-            <MudNavGroup Title="Support & Helpdesk" Icon="@Icons.Material.Filled.HeadsetMic" Expanded="true">
-                <MudNavLink Href="tickets" Icon="@Icons.Material.Filled.ConfirmationNumber">Ticket-Queue</MudNavLink>
-            </MudNavGroup>
-            <MudNavGroup Title="Infrastruktur" Icon="@Icons.Material.Filled.Computer" Expanded="true">
-                <MudNavLink Href="assets" Icon="@Icons.Material.Filled.Dns">Asset-CMDB</MudNavLink>
-                <MudNavLink Href="ipam" Icon="@Icons.Material.Filled.Router">IPAM / Netzwerke</MudNavLink>
-            </MudNavGroup>
-        </MudNavMenu>
-    </MudDrawer>
-
-    <MudMainContent Class="mud-main-content">
-        <MudContainer MaxWidth="MaxWidth.False" Class="mud-container" Style="padding: 0; margin: 0; height: 100%;">
+            <MudMainContent Class="main-content-fluid">
+                <div style="padding: 0; height: 100%;">
+                    @Body
+                </div>
+            </MudMainContent>
+        </MudLayout>
+    </Authorized>
+    <NotAuthorized>
+        @if (Nav.Uri.Contains("/login"))
+        {
             @Body
-        </MudContainer>
-    </MudMainContent>
-</MudLayout>
+        }
+        else
+        {
+            <div class="d-flex justify-center align-center" style="height: 100vh; background-color: #f4f4f4;">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+    </NotAuthorized>
+</AuthorizeView>
 
 <style>
-    .mud-main-content { min-height: 100vh; display: flex; flex-direction: column; }
-    .mud-container { padding-left: 0 !important; padding-right: 0 !important; }
+    /* Header & Titelleiste */
+    .header-logo { height: 32px; object-fit: contain; filter: brightness(0) invert(1); }
+    .header-search-container { width: 400px; margin-right: 12px; }
+    .header-search-input .mud-input { color: white !important; background-color: rgba(255,255,255,0.15) !important; border-radius: 4px; }
+    .header-search-input .mud-input > input::placeholder { color: rgba(255,255,255,0.7) !important; }
+    .header-search-input .mud-input-outlined-border { border-color: rgba(255,255,255,0.3) !important; }
+    .header-search-input:hover .mud-input-outlined-border { border-color: white !important; }
+
+    /* Layout Struktur für die Sidebar */
+    .sidebar-wrapper { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    .sidebar-content { flex-grow: 1; overflow-y: auto; }
+    .sidebar-footer { flex-shrink: 0; background-color: rgba(0,0,0,0.03); padding-bottom: 12px; }
     
-    /* Globale Suche Styling-Anpassung in Appbar */
-    .global-search .mud-input { color: white !important; }
-    .global-search .mud-input > input::placeholder { color: rgba(255,255,255,0.7) !important; }
-    .global-search .mud-input-outlined-border { border-color: rgba(255,255,255,0.3) !important; }
-    .global-search:hover .mud-input-outlined-border { border-color: white !important; }
+    /* Status Bereich Styling */
+    .user-status-card { background-color: rgba(0,0,0,0.02); border-radius: 8px; margin: 0 12px; border: 1px solid rgba(0,0,0,0.05); }
+    .status-row { display: flex; align-items: center; gap: 8px; }
+    .status-indicator { width: 8px; height: 8px; border-radius: 50%; }
+    .status-indicator.online { background-color: #2e7d32; box-shadow: 0 0 4px #2e7d32; }
+    
+    /* Hauptinhaltsbereich */
+    .main-content-fluid { min-height: 100vh; background-color: #fff; }
 </style>
 
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode = false;
     private MudTheme _theme = new MudTheme();
-
     private string _userName = "User";
     private string _userEmail = "";
     private string _userRole = "Reader";
     private string _userInitials = "U";
-    
     private string _globalSearchQuery = "";
 
-    private string AppbarStyle => $"background-color: {(_isDarkMode ? "#0d1117" : ThemeService.Config.AppbarColor)}; color: {ThemeService.Config.AppbarText};";
-    private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : ThemeService.Config.DrawerColor)};";
+    // AppbarStyle auf Dunkelgrau (#333333) fixiert
+    private string AppbarStyle => $"background-color: #333333; color: white;";
+    private string DrawerStyle => $"background-color: {(_isDarkMode ? "#161b22" : "#f8f9fa")}; border-right: 1px solid {(_isDarkMode ? "#30363d" : "#e0e0e0")};";
 
     protected override async Task OnInitializedAsync()
     {
@@ -114,9 +171,13 @@
         if (user.Identity?.IsAuthenticated == true)
         {
             _userName = user.Identity.Name ?? "User";
-            _userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
-            _userRole = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Reader";
+            _userEmail = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+            _userRole = user.FindFirst(ClaimTypes.Role)?.Value ?? "Reader";
             _userInitials = string.IsNullOrWhiteSpace(_userName) ? "U" : _userName.Substring(0, 1).ToUpper();
+        }
+        else
+        {
+            if (!Nav.Uri.Contains("/login")) Nav.NavigateTo("/login");
         }
     }
 
@@ -125,15 +186,9 @@
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_globalSearchQuery))
         {
             Nav.NavigateTo($"/search?q={Uri.EscapeDataString(_globalSearchQuery)}");
+            _globalSearchQuery = "";
         }
     }
-
-    private Color GetRoleColor(string role) => role switch {
-        "Global Admin" => Color.Error,
-        "Tenant Admin" => Color.Warning,
-        "CI Editor" => Color.Success,
-        _ => Color.Info
-    };
 
     private void DrawerToggle() => _drawerOpen = !_drawerOpen;
 
@@ -148,27 +203,15 @@
     {
         var cfg = ThemeService.Config;
         _isDarkMode = cfg.IsDark;
-
         var newTheme = new MudTheme();
         newTheme.PaletteLight.Primary = cfg.PrimaryColor;
-        newTheme.PaletteLight.Secondary = cfg.SecondaryColor;
-        newTheme.PaletteLight.Background = cfg.BackgroundColor;
-        newTheme.PaletteLight.Surface = cfg.SurfaceColor;
-        newTheme.PaletteLight.TextPrimary = cfg.TextPrimary;
-        newTheme.PaletteLight.ActionDefault = cfg.PrimaryColor;
+        newTheme.PaletteLight.Background = "#ffffff";
+        newTheme.PaletteLight.DrawerBackground = "#f8f9fa";
         
         newTheme.PaletteDark.Primary = cfg.PrimaryColor;
         newTheme.PaletteDark.Background = "#0d1117"; 
         newTheme.PaletteDark.Surface = "#161b22";
-        newTheme.PaletteDark.TextPrimary = "#c9d1d9";
-        newTheme.PaletteDark.ActionDefault = cfg.PrimaryColor;
-        
-        if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
-        {
-            newTheme.Typography.Default.FontFamily = new[] { cfg.FontFamily };
-            newTheme.Typography.Default.FontSize = $"{cfg.BaseFontSize}px";
-        }
-        
+        newTheme.PaletteDark.DrawerBackground = "#161b22";
         _theme = newTheme;
         InvokeAsync(StateHasChanged);
     }

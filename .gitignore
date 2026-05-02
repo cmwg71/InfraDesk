@@ -58,3 +58,4 @@ NuGet Pakete werden beim Build wiederhergestellt
 
 *.nupkg
 packages/
+.aider*
