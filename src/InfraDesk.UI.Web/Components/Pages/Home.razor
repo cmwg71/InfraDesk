@@ -45,12 +45,20 @@
             <!-- STATISTIK KACHELN -->
             <div class="d-flex gap-4">
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-primary);" @onclick="@(() => Nav.NavigateTo("/assets"))">
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Inherit"
+                                   Style="position: absolute; top: 8px; right: 8px;"
+                                   OnClick="@((e) => { Nav.NavigateTo("/assets/create"); })"
+                                   @onclick:stopPropagation="true" />
                     <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Large" />
                     <div class="stat-value">@_assetsCount</div>
                     <div class="stat-label">Gesamt-Assets</div>
                 </div>
 
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-error);" @onclick="@(() => Nav.NavigateTo("/tickets"))">
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Inherit"
+                                   Style="position: absolute; top: 8px; right: 8px;"
+                                   OnClick="@((e) => { Nav.NavigateTo("/tickets/create"); })"
+                                   @onclick:stopPropagation="true" />
                     <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" />
                     <div class="stat-value" style="color: var(--mud-palette-error);">@_openTicketsCount</div>
                     <div class="stat-label">Offene Tickets</div>
