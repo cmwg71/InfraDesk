@@ -2,348 +2,411 @@
 @page "/settings"
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
+@using System.Net.Http.Headers
 @using System.Text.Json
-@using System.Reflection
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 @inject ThemeService ThemeService
-@inject UpdateService UpdateService
-@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>InfraDesk - Einstellungen</PageTitle>
 
 <style>
-    /* PDQ Inventory Style: High Density Layout */
-    .pdq-container { background-color: #fff; height: calc(100vh - 100px); display: flex; flex-direction: row; border-top: none; }
+    .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
     .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
-    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 24px; }
-    
-    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 12px; margin-top: 20px; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 24px; }
+    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 16px; margin-top: 24px; }
     .pdq-section-header:first-child { margin-top: 0; border-top: none; }
     
-    .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
+    .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 20px; background-color: #fafafa; border-radius: 8px; border: 1px solid #eee; margin-bottom: 24px; }
+    .info-label { font-weight: bold; color: #666; font-size: 0.85rem; display: flex; align-items: center; }
+    .info-value { font-weight: 600; color: #333; font-size: 0.9rem; display: flex; align-items: center; }
     
-    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
+    .status-ok-text { color: #2e7d32; font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
+    .status-update-text { color: var(--mud-palette-primary); font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
     
-    /* Preset Buttons Style */
-    .preset-card { cursor: pointer; transition: transform 0.1s; border: 1px solid #ddd; }
-    .preset-card:hover { transform: scale(1.02); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
+    .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
+    .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
+
+    .label-preview-container { border: 1px solid #ccc; padding: 20px; background: #eee; border-radius: 8px; display: flex; justify-content: center; }
+    .physical-label { background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; position: relative; border: 1px solid #999; }
+    .label-header { width: 100%; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; font-weight: bold; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .label-footer { width: 100%; text-align: center; border-top: 1px solid #eee; padding-top: 4px; margin-top: 8px; font-size: 0.6rem; color: #888; }
+    .barcode-svg-mock { width: 80%; height: 40px; background: repeating-linear-gradient(90deg, #000, #000 2px, #fff 2px, #fff 4px); margin-bottom: 4px; }
+    .qr-container { position: relative; width: 64px; height: 64px; background: #000; padding: 2px; }
+    .qr-white-inner { width: 100%; height: 100%; background: #fff; display: flex; align-items: center; justify-content: center; position: relative; }
+    .qr-logo-overlay { position: absolute; width: 16px; height: 16px; background: #fff; border: 1px solid #000; display: flex; align-items: center; justify-content: center; z-index: 5; }
 </style>
 
 <div class="pdq-toolbar">
-    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/"))" Size="Size.Small" Class="mr-2" />
     <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-    <MudText Typo="Typo.body2" Class="font-weight-bold">System-Einstellungen</MudText>
+    <MudText Typo="Typo.body2" Class="font-weight-bold">System-Konfiguration</MudText>
+    <MudSpacer />
+    @if (_activeSection != "Info")
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettings" Loading="_isSaving">Speichern</MudButton>
+    }
 </div>
 
 <div class="pdq-container">
-    
-    <!-- NAVIGATION SIDEBAR -->
     <div class="pdq-sidebar">
         <MudNavMenu Margin="Margin.Dense" Rounded="false">
+            <div class="pdq-section-header">Mandant & Organisation</div>
+            <MudNavLink OnClick="@(() => _activeSection = "MasterData")" Class="@(_activeSection == "MasterData" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Lifecycle")" Class="@(_activeSection == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "TagSchema")" Class="@(_activeSection == "TagSchema" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
             
-            <div class="pdq-section-header" style="margin-top: 0; border-top: none;">Allgemein</div>
-            <MudNavLink OnClick="@(() => _activeTab = "Profile")" Class="@(_activeTab == "Profile" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Unternehmensprofil</MudNavLink>
-            <MudNavLink OnClick="@(() => _activeTab = "Inventory")" Class="@(_activeTab == "Inventory" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCodeScanner">Inventarisierung</MudNavLink>
+            <div class="pdq-section-header">UI & Personalisierung</div>
+            <MudNavLink OnClick="@(() => _activeSection = "Design")" Class="@(_activeSection == "Design" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Palette">Farben & Themes</MudNavLink>
             
-            <div class="pdq-section-header">Sicherheit & IAM</div>
-            <MudNavLink OnClick="@(() => _activeTab = "IAM")" Class="@(_activeTab == "IAM" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Security">Benutzer & Rollen</MudNavLink>
-
-            <div class="pdq-section-header">Konfiguration</div>
-            <MudNavLink OnClick="@(() => _activeTab = "Theme")" Class="@(_activeTab == "Theme" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Palette">Design & Theme</MudNavLink>
-            <MudNavLink OnClick="@(() => _activeTab = "Lifecycle")" Class="@(_activeTab == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Recycling">Asset-Lebenszyklus</MudNavLink>
-            
-            <div class="pdq-section-header">System</div>
-            <MudNavLink OnClick="@(() => _activeTab = "Update")" Class="@(_activeTab == "Update" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SystemUpdate">Update & Info</MudNavLink>
-
+            <div class="pdq-section-header">System & Service</div>
+            <MudNavLink OnClick="@(() => _activeSection = "Info")" Class="@(_activeSection == "Info" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Update">Update & Info</MudNavLink>
         </MudNavMenu>
     </div>
 
-    <!-- CONTENT AREA -->
     <div class="pdq-content">
-        
-        <!-- 1. UNTERNEHMENSPROFIL -->
-        @if (_activeTab == "Profile")
+        @if (_isLoading)
         {
-            <MudText Typo="Typo.h5" Class="mb-2 font-weight-bold">Zentrale Stammdaten</MudText>
-            <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">Definieren Sie hier Ihre primäre Organisation (Mandant) und den Hauptstandort.</MudText>
-
-            @if (_isLoadingMasterData) { <MudProgressCircular Indeterminate="true" Color="Color.Primary" /> }
-            else {
-                <div class="pdq-section-header">Organisation / Firma</div>
-                <MudGrid Spacing="2" Class="mb-6">
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.CompanyName" Label="Name der Organisation *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.Domain" Label="Primäre Domain" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Firmen-Kürzel *" MaxLength="3" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
+            <div class="d-flex justify-center align-center" style="height: 200px;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+        }
+        else
+        {
+            @if (_activeSection == "MasterData")
+            {
+                <div class="pdq-section-header">Organisation & Anschrift</div>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="8"><MudTextField @bind-Value="_masterData.CompanyName" Label="Offizieller Firmenname" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präfix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
+                    <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Domain" Label="E-Mail Domäne" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="firma.de" /></MudItem>
+                    
+                    <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Street" Label="Straße & Hausnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.ZipCity" Label="PLZ & Ort" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.State" Label="Bundesland" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.Country" Label="Land" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                 </MudGrid>
 
-                <div class="pdq-section-header">Zentrale / Hauptstandort</div>
-                <MudGrid Spacing="2" Class="mb-8">
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.Street" Label="Straße und Hausnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.ZipCity" Label="PLZ und Ort *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.State" Label="Bundesland / Kanton" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.Country" Label="Land" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                <div class="pdq-section-header mt-8">Regional-Einstellungen</div>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="string" Label="System-Zeitzone" @bind-Value="_masterData.TimeZoneId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var tz in _timeZones) { <MudSelectItem Value="@tz">@tz</MudSelectItem> }
+                        </MudSelect>
+                    </MudItem>
                 </MudGrid>
-
-                <div class="pdq-section-header">Mandanten-Sicherheit & Compliance</div>
-                <MudPaper Class="pa-4 mb-8" Elevation="0" Outlined="true" Style="border-radius: 4px; background-color: var(--mud-palette-background-grey);">
-                    <MudSwitch @bind-Value="_masterData.EnableMultiTenancy" Color="Color.Primary" Label="Multi-Mandanten-Architektur erzwingen" />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">Isoliert Daten rechtlich eigenständiger Firmen innerhalb dieser Instanz.</MudText>
-                </MudPaper>
-
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Size="Size.Small" OnClick="SaveMasterData">Stammdaten speichern</MudButton>
             }
-        }
-
-        <!-- 2. INVENTARISIERUNG -->
-        @if (_activeTab == "Inventory")
-        {
-            <MudText Typo="Typo.h5" Class="mb-4 font-weight-bold">Asset-Tag Generierung</MudText>
-            <div class="pdq-section-header">Live-Vorschau des Schemas</div>
-            <MudPaper Class="pa-6 mb-8" Elevation="0" Outlined="true" Style="border-radius: 4px; background-color: var(--mud-palette-background-grey);">
-                <div class="d-flex align-center" style="font-family: monospace; font-size: 1.5rem; background-color: #fff; padding: 16px; border-radius: 4px; border: 1px solid #ccc;">
-                    <strong style="color: var(--mud-palette-primary);">@(string.IsNullOrWhiteSpace(_masterData.CompanyPrefix) ? "[FIRMA]" : _masterData.CompanyPrefix.ToUpper())</strong>
-                    <span style="opacity: 0.5; margin: 0 8px;">-</span>
-                    <span style="color: var(--mud-palette-secondary);">[ST]</span>
-                    <span style="opacity: 0.5; margin: 0 8px;">-</span>
-                    <span style="color: var(--mud-palette-info);">[KAT]</span>
-                    <span style="opacity: 0.5; margin: 0 8px;">-</span>
-                    <strong style="color: var(--mud-palette-success);">[00001]</strong>
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-4 d-block">Das Kürzel wird aus dem Unternehmensprofil übernommen.</MudText>
-            </MudPaper>
-        }
-
-        <!-- 3. IDENTITY & ACCESS (RBAC) -->
-        @if (_activeTab == "IAM")
-        {
-            <MudText Typo="Typo.h5" Class="mb-4 font-weight-bold">Benutzer & Berechtigungen</MudText>
-            <div class="pdq-section-header">Identity Provider (IdP)</div>
-            <MudPaper Class="pa-4 mb-6" Elevation="0" Outlined="true" Style="border-radius: 4px;">
-                <MudStack Row="true" AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@Icons.Custom.Brands.Microsoft" Color="Color.Primary" Size="Size.Large" />
-                    <MudText Typo="Typo.body2">Microsoft Entra ID (Azure AD) ist zur Anbindung bereit.</MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small">Konfigurieren</MudButton>
-                </MudStack>
-            </MudPaper>
-            
-            <div class="pdq-section-header">Aktive Benutzer (Mock)</div>
-            <MudDataGrid Items="@_mockUsers" Dense="true" Bordered="true" Elevation="0" Striped="true">
-                <Columns>
-                    <PropertyColumn Property="x => x.Name" Title="Benutzer" />
-                    <PropertyColumn Property="x => x.Role" Title="Rolle (RBAC)" />
-                    <PropertyColumn Property="x => x.Tenants" Title="Zugriff (Mandanten)" />
-                </Columns>
-            </MudDataGrid>
-        }
-
-        <!-- 4. DESIGN & THEME (Vollständiger Umfang) -->
-        @if (_activeTab == "Theme")
-        {
-            <MudText Typo="Typo.h5" Class="mb-4 font-weight-bold">Design & Benutzeroberfläche</MudText>
-            <MudGrid Spacing="4">
-                <MudItem xs="12" lg="7">
-                    <div class="pdq-section-header">Farbschema manuell</div>
-                    <MudGrid Spacing="2">
-                        <MudItem xs="6"><MudColorPicker Label="Primärfarbe" @bind-Text="_themeConfig.PrimaryColor" Variant="Variant.Outlined" Margin="Margin.Dense" OnClick="NotifyManualChange" /></MudItem>
-                        <MudItem xs="6"><MudColorPicker Label="Sekundärfarbe" @bind-Text="_themeConfig.SecondaryColor" Variant="Variant.Outlined" Margin="Margin.Dense" OnClick="NotifyManualChange" /></MudItem>
-                        <MudItem xs="6"><MudColorPicker Label="Hintergrund" @bind-Text="_themeConfig.BackgroundColor" Variant="Variant.Outlined" Margin="Margin.Dense" OnClick="NotifyManualChange" /></MudItem>
-                        <MudItem xs="6"><MudColorPicker Label="Oberflächen" @bind-Text="_themeConfig.SurfaceColor" Variant="Variant.Outlined" Margin="Margin.Dense" OnClick="NotifyManualChange" /></MudItem>
-                    </MudGrid>
-
-                    <div class="pdq-section-header">Typografie</div>
-                    <MudGrid Spacing="2">
-                        <MudItem xs="8">
-                            <MudSelect T="string" Label="Schriftart" @bind-Value="_themeConfig.FontFamily" Variant="Variant.Outlined" Margin="Margin.Dense" SelectedValuesChanged="NotifyManualChange">
-                                <MudSelectItem Value="@("'Roboto', sans-serif")">Roboto (Standard)</MudSelectItem>
-                                <MudSelectItem Value="@("'Inter', sans-serif")">Inter (Modern)</MudSelectItem>
-                                <MudSelectItem Value="@("'Segoe UI', sans-serif")">System UI</MudSelectItem>
-                            </MudSelect>
-                        </MudItem>
-                        <MudItem xs="4"><MudNumericField Label="Basis-Größe" @bind-Value="_themeConfig.BaseFontSize" Min="12" Max="20" Variant="Variant.Outlined" Margin="Margin.Dense" @onkeyup="NotifyManualChange" /></MudItem>
-                    </MudGrid>
-                    <MudButton Class="mt-6" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveThemeSettings">Design permanent speichern</MudButton>
-                </MudItem>
-
-                <MudItem xs="12" lg="5">
-                    <div class="pdq-section-header">Vordefinierte Presets</div>
-                    <MudStack Spacing="1">
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Corporate"))" FullWidth Style="background-color: #1976D2; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Corporate Blue</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Midnight"))" FullWidth Style="background-color: #1A237E; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Midnight Deep Ocean</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Nature"))" FullWidth Style="background-color: #2E7D32; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Nature Inspired</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Energy"))" FullWidth Style="background-color: #FF6D00; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Vibrant Energy</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Pastel"))" FullWidth Style="background-color: #F48FB1; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Soft Pastels</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Elegance"))" FullWidth Style="background-color: #8D6E63; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Neutral Elegance</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("Retro"))" FullWidth Style="background-color: #E64A19; color: white; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">Retro Sunset</MudButton>
-                        <MudButton Variant="Variant.Filled" OnClick="@(() => ApplyPreset("HighContrast"))" FullWidth Style="background-color: #000; color: #FFFF00; justify-content: flex-start; text-transform: none; font-size: 0.75rem;">High Contrast</MudButton>
-                    </MudStack>
-                </MudItem>
-            </MudGrid>
-        }
-
-        <!-- 5. ASSET-LEBENSZYKLUS (Vollständig) -->
-        @if (_activeTab == "Lifecycle")
-        {
-            <MudText Typo="Typo.h5" Class="mb-4 font-weight-bold">Asset-Lebenszyklus</MudText>
-            @if (_lifecycleConfig == null) { <MudProgressCircular Indeterminate="true" Color="Color.Primary" /> }
-            else {
-                @foreach (var phase in _lifecycleConfig.Keys.ToList()) {
-                    <MudPaper Class="pa-4 mb-4" Elevation="0" Outlined="true" Style="border-radius: 4px;">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-                            <MudIcon Icon="@Icons.Material.Filled.Label" Color="Color.Primary" Size="Size.Small" />
-                            <MudTextField @bind-Value="_phaseRenames[phase]" Label="Name der Phase" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px; font-weight: bold;" />
-                            <MudSpacer />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemovePhase(phase))" />
-                        </MudStack>
-                        <MudChipSet T="string" AllClosable="true" OnClose="@((chip) => { if (chip.Text != null) RemoveStatus(phase, chip.Text); })">
-                            @foreach (var status in _lifecycleConfig[phase]) { <MudChip Text="@status" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined" /> }
-                        </MudChipSet>
-                        <MudStack Row="true" Class="mt-2" AlignItems="AlignItems.Center">
-                            <MudTextField T="string" @bind-Value="_newStatusInputs[phase]" Placeholder="Neuer Status..." Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 200px;" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" OnClick="@(() => AddStatus(phase))" Variant="Variant.Filled" />
-                        </MudStack>
+            else if (_activeSection == "Lifecycle")
+            {
+                <div class="pdq-section-header">Lebenszyklus Phasen & Status</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, welche Zustände ein Asset in Ihrem Unternehmen durchlaufen kann.</MudText>
+                
+                @foreach (var group in _lifecycleConfig)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mb-4" Style="background: #fafafa;">
+                        <div class="d-flex align-center justify-space-between mb-2">
+                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">PHASE: @group.Key</MudText>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var status in group.Value)
+                            {
+                                <MudChip T="string" OnClose="@(() => RemoveStatus(group.Key, status))" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">@status</MudChip>
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => AddStatus(group.Key))" />
+                        </div>
                     </MudPaper>
                 }
-                <MudButton StartIcon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small" OnClick="AddPhase">Neue Phase hinzufügen</MudButton>
-                <MudButton Class="ml-4" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Size="Size.Small" OnClick="SaveLifecycleSettings">Konfiguration speichern</MudButton>
             }
-        }
-
-        <!-- 6. UPDATE & SYSTEM INFO -->
-        @if (_activeTab == "Update")
-        {
-            <div class="d-flex justify-center py-10">
-                <MudPaper Class="pa-10 d-flex flex-column align-center" Elevation="0" Outlined="true" Style="max-width: 700px; width: 100%; border-radius: 8px;">
-                    <img src="InfraDesk_Ico.png" alt="Logo" style="height: 100px; margin-bottom: 24px;" />
-                    <MudText Typo="Typo.h4" Class="font-weight-bold mb-2">InfraDesk Enterprise</MudText>
-                    
-                    <div class="pdq-grid w-100 mt-8">
-                        <div class="pdq-label">Version</div>
-                        <div class="pdq-value" style="font-family: monospace; font-weight: bold;">@_currentVersion</div>
-                        <div class="pdq-label">Entwicklung</div>
-                        <div class="pdq-value">Christian Grams (Grams IT)</div>
-                        <div class="pdq-label">Lizenz</div>
-                        <div class="pdq-value">Enterprise Subscription</div>
-                    </div>
-
-                    <div class="pdq-section-header w-100 mt-8">GitHub Update-Service</div>
-                    <MudAlert Severity="Severity.Info" Dense="true" Class="w-100 mb-4 mt-2">Prüft live gegen das private GitHub Repository.</MudAlert>
-                    <MudTextField @bind-Value="_gitHubToken" Label="GitHub Personal Access Token (PAT)" Variant="Variant.Outlined" Margin="Margin.Dense" InputType="InputType.Password" Placeholder="ghp_..." FullWidth="true" />
-                    
-                    <MudStack Row="true" Class="mt-4 w-100" AlignItems="AlignItems.Center">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CheckForUpdates" Loading="_isCheckingUpdate" StartIcon="@Icons.Material.Filled.Refresh">Nach Updates suchen</MudButton>
-                        @if (_newVersionAvailable) { <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.NewReleases">Update verfügbar!</MudChip> }
-                        else if (_isUpToDate) { <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Aktuell</MudChip> }
-                    </MudStack>
-
-                    <MudText Typo="Typo.caption" Class="mt-10 opacity-50">© @DateTime.Now.Year Grams IT. PDQ High-Density Edition.</MudText>
+            else if (_activeSection == "TagSchema")
+            {
+                <div class="pdq-section-header">Asset-Tag Generierung</div>
+                <MudPaper Class="pa-6 mb-8" Outlined="true" Style="border-left: 6px solid var(--mud-palette-primary);">
+                    <MudTextField @bind-Value="_masterData.AssetTagPattern" Label="Schema-Formel bearbeiten" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="{COMP}-{LOC}-{CAT}-{NUM:5}" OnBlur="OnFieldChanged" />
+                    <MudDivider Class="my-4" />
+                    <MudText Typo="Typo.caption" Class="font-weight-bold mb-2 d-block">VORSCHAU:</MudText>
+                    <MudText Typo="Typo.body1" Style="font-family: monospace; font-weight: bold; font-size: 1.2rem; background: #eee; padding: 12px; border-radius: 4px;">@GetTagPreview()</MudText>
                 </MudPaper>
-            </div>
+
+                <div class="pdq-section-header">Verfügbare Platzhalter</div>
+                <MudSimpleTable Dense="true" Bordered="true" Elevation="0" Class="mt-2 mb-8">
+                    <thead><tr><th style="width: 150px;">Kürzel</th><th>Bedeutung</th><th>Beispiel</th></tr></thead>
+                    <tbody>
+                        <tr><td><span class="token-code">{COMP}</span></td><td>Firmen-Präfix</td><td>@(_masterData.CompanyPrefix ?? "GIT")</td></tr>
+                        <tr><td><span class="token-code">{LOC}</span></td><td>Standort-Kürzel</td><td>FRA</td></tr>
+                        <tr><td><span class="token-code">{CAT}</span></td><td>Kategorie-Kürzel</td><td>SRV</td></tr>
+                        <tr><td><span class="token-code">{NUM:n}</span></td><td>Laufende Nummer</td><td>00042</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                <div class="pdq-section-header">Barcode & QR-Code Konfiguration</div>
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="8">
+                        <MudCard Outlined="true" Class="mb-4">
+                            <MudCardContent>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="12">
+                                        <MudSelect T="string" Label="Druckvorlage" @bind-Value="_masterData.LabelTemplate" @bind-Value:after="ApplyTemplateDimensions" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("Brother DK-11201 (29x90mm)")">Brother DK-11201 (29x90mm)</MudSelectItem>
+                                            <MudSelectItem Value="@("Brother DK-11209 (29x62mm)")">Brother DK-11209 (29x62mm)</MudSelectItem>
+                                            <MudSelectItem Value="@("Zebra Desktop 4x2 (102x51mm)")">Zebra Desktop 4x2 (102x51mm)</MudSelectItem>
+                                            <MudSelectItem Value="@("Avery Zweckform 70x37mm")">Avery Zweckform 70x37mm</MudSelectItem>
+                                            <MudSelectItem Value="@("Custom")">Benutzerdefiniert</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSelect T="string" Label="Barcode Typ" @bind-Value="_masterData.BarcodeType" @bind-Value:after="OnFieldChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("Code128")">Code 128</MudSelectItem>
+                                            <MudSelectItem Value="@("Code39")">Code 39</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSelect T="string" Label="QR ECC" @bind-Value="_masterData.QrErrorCorrection" @bind-Value:after="OnFieldChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("L")">Level L (7%)</MudSelectItem>
+                                            <MudSelectItem Value="@("M")">Level M (15%)</MudSelectItem>
+                                            <MudSelectItem Value="@("Q")">Level Q (25%)</MudSelectItem>
+                                            <MudSelectItem Value="@("H")">Level H (30%)</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <div class="d-flex flex-wrap gap-4">
+                                            <MudCheckBox T="bool" @bind-Value="_masterData.ShowTextBelowBarcode" @bind-Value:after="OnFieldChanged" Label="ID-Klartext" Color="Color.Primary" Dense="true" />
+                                            <MudCheckBox T="bool" @bind-Value="_masterData.PrintAssetName" @bind-Value:after="OnFieldChanged" Label="Asset Name" Color="Color.Primary" Dense="true" />
+                                            <MudCheckBox T="bool" @bind-Value="_masterData.PrintSerialNumber" @bind-Value:after="OnFieldChanged" Label="Seriennummer" Color="Color.Primary" Dense="true" />
+                                            <MudCheckBox T="bool" @bind-Value="_masterData.PrintCompanyName" @bind-Value:after="OnFieldChanged" Label="Firma" Color="Color.Primary" Dense="true" />
+                                            <MudCheckBox T="bool" @bind-Value="_masterData.IncludeLogoInQr" @bind-Value:after="OnFieldChanged" Label="Logo (QR)" Color="Color.Primary" Dense="true" />
+                                        </div>
+                                    </MudItem>
+                                    <MudItem xs="4"><MudNumericField T="int" @bind-Value="_masterData.LabelWidth" @bind-Value:after="OnFieldChanged" Label="B (mm)" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_masterData.LabelTemplate != "Custom")" /></MudItem>
+                                    <MudItem xs="4"><MudNumericField T="int" @bind-Value="_masterData.LabelHeight" @bind-Value:after="OnFieldChanged" Label="H (mm)" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_masterData.LabelTemplate != "Custom")" /></MudItem>
+                                    <MudItem xs="4"><MudNumericField T="int" @bind-Value="_masterData.PrintResolutionDpi" @bind-Value:after="OnFieldChanged" Label="DPI" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudText Typo="Typo.subtitle2" Class="font-weight-bold mb-2">LIVE-VORSCHAU (ETIKETT)</MudText>
+                        <div class="label-preview-container">
+                            <div class="physical-label" style="@($"width: {Math.Min(_masterData.LabelWidth * 3.5, 250)}px; height: {Math.Min(_masterData.LabelHeight * 3.5, 150)}px;")">
+                                @if (_masterData.PrintCompanyName) { <div class="label-header" style="font-size: 0.7rem;">@_masterData.CompanyName</div> }
+                                <div class="d-flex align-center w-100 justify-space-around">
+                                    <div class="d-flex flex-column align-center" style="flex: 1; overflow:hidden;">
+                                        <div class="barcode-svg-mock"></div>
+                                        @if (_masterData.ShowTextBelowBarcode) { <div style="font-size: 0.6rem; font-family: monospace; font-weight: bold;">@GetTagPreview()</div> }
+                                    </div>
+                                    <div class="qr-container ml-2">
+                                        <div class="qr-white-inner">
+                                            <MudIcon Icon="@Icons.Material.Filled.QrCode2" Size="Size.Large" Color="Color.Dark" />
+                                            @if (_masterData.IncludeLogoInQr) { <div class="qr-logo-overlay"><MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Style="font-size: 10px;" Color="Color.Primary" /></div> }
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="label-footer">@(_masterData.PrintAssetName ? "PROD-SERVER-01" : "") @(_masterData.PrintSerialNumber ? "| SN-9938" : "")</div>
+                            </div>
+                        </div>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4" StartIcon="@Icons.Material.Filled.Print" OnClick="PrintTestLabel">Testausdruck</MudButton>
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (_activeSection == "Design")
+            {
+                <div class="pdq-section-header">Oberfläche & Design</div>
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <MudCard Outlined="true">
+                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1">Modus & Grundfarben</MudText></CardHeaderContent></MudCardHeader>
+                            <MudCardContent>
+                                <MudSwitch T="bool" Value="@ThemeService.Config.IsDark" ValueChanged="OnDarkModeChanged" Color="Color.Primary" Label="Dunkelmodus" />
+                                <MudColorPicker Label="Primärfarbe" @bind-Text="_tempPrimaryColor" @bind-Text:after="ApplyColor" />
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudCard Outlined="true">
+                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1">Design-Paletten (Presets)</MudText></CardHeaderContent></MudCardHeader>
+                            <MudCardContent>
+                                <MudList T="string" Clickable="true" @bind-SelectedValue="_selectedPalette">
+                                    <MudListItem Text="Corporate Blue" OnClick="@(() => SelectPalette("#004a99"))"><div class="d-flex align-center"><div class="color-preview" style="background:#004a99"></div>Corporate Blue</div></MudListItem>
+                                    <MudListItem Text="Midnight Ocean" OnClick="@(() => SelectPalette("#0a192f"))"><div class="d-flex align-center"><div class="color-preview" style="background:#0a192f"></div>Midnight Deep Ocean</div></MudListItem>
+                                    <MudListItem Text="Forest Green" OnClick="@(() => SelectPalette("#1b4332"))"><div class="d-flex align-center"><div class="color-preview" style="background:#1b4332"></div>Nature Inspired</div></MudListItem>
+                                </MudList>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (_activeSection == "Info")
+            {
+                <div class="text-center mb-8">
+                    <img src="InfraDesk_Logo.png" alt="InfraDesk" style="height: 60px; margin-bottom: 16px;" />
+                    <MudText Typo="Typo.h4" Style="font-weight: 900; color: #333;">InfraDesk Enterprise</MudText>
+                </div>
+                <div class="info-grid">
+                    <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-2" /> Version</div>
+                    <div class="info-value">
+                        @_currentVersion
+                        @if (_isChecking) { <MudProgressCircular Color="Color.Default" Indeterminate="true" Size="Size.Small" Class="ml-4" Style="width:16px; height:16px;"/> }
+                        else if (_updateChecked) {
+                            @if (_updateFound) { <span class="status-update-text ml-4"><MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" /> Update verfügbar (@_latestVersion)</span> }
+                            else { <span class="status-ok-text ml-4"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" /> Version aktuell</span> }
+                        }
+                    </div>
+                    <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" Class="mr-2" /> Entwicklung</div>
+                    <div class="info-value">Christian Grams (Grams IT)</div>
+                    <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Verified" Size="Size.Small" Class="mr-2" /> Lizenz</div>
+                    <div class="info-value"><MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Enterprise Subscription</MudChip></div>
+                </div>
+                <div class="footer-copyright">© 2026 Grams IT</div>
+            }
         }
     </div>
 </div>
 
 @code {
-    private string _activeTab = "Profile";
-    private ThemeConfig _themeConfig = new();
-    private MasterDataModel _masterData = new();
-    private bool _isLoadingMasterData = true;
-    
-    // Lifecycle Management
-    private Dictionary<string, List<string>>? _lifecycleConfig;
-    private Dictionary<string, string> _newStatusInputs = new();
-    private Dictionary<string, string> _phaseRenames = new();
+    private string _activeSection = "MasterData";
+    private bool _isLoading = true;
+    private bool _isSaving = false;
 
-    // GitHub Updates
-    private string _currentVersion = "Lade...";
-    private string _gitHubToken = "";
-    private bool _isCheckingUpdate = false;
-    private bool _newVersionAvailable = false;
-    private bool _isUpToDate = false;
+    private MasterDataDto _masterData = new();
+    private List<string> _timeZones = new();
+    private Dictionary<string, List<string>> _lifecycleConfig = new();
 
-    public class MasterDataModel { public string CompanyName { get; set; } = ""; public string Domain { get; set; } = ""; public string CompanyPrefix { get; set; } = ""; public string Street { get; set; } = ""; public string ZipCity { get; set; } = ""; public string State { get; set; } = ""; public string Country { get; set; } = ""; public bool EnableMultiTenancy { get; set; } = true; }
-    public class UserModel { public string Name {get;set;}=""; public string Role {get;set;}=""; public string Tenants {get;set;}=""; }
-    private List<UserModel> _mockUsers = new() { new() { Name = "Christian Grams", Role = "Global Admin", Tenants = "Alle (Systemweit)" } };
+    private string _tempPrimaryColor = "#004a99";
+    private string _selectedPalette = "Corporate Blue";
+
+    private string _currentVersion = "2026.5.2.127";
+    private bool _isChecking = false;
+    private bool _updateChecked = false;
+    private bool _updateFound = false;
+    private string _latestVersion = "";
 
     protected override async Task OnInitializedAsync()
     {
-        _themeConfig = ThemeService.Config;
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        if (version != null) _currentVersion = version.ToString();
-
-        await LoadMasterData();
-        await LoadLifecycleSettings();
-    }
-
-    private async Task LoadMasterData()
-    {
-        _isLoadingMasterData = true;
-        try { _masterData = await Http.GetFromJsonAsync<MasterDataModel>("api/settings/masterdata") ?? new(); } catch { }
-        finally { _isLoadingMasterData = false; }
-    }
-
-    private async Task SaveMasterData()
-    {
-        if (string.IsNullOrWhiteSpace(_masterData.CompanyName) || string.IsNullOrWhiteSpace(_masterData.CompanyPrefix)) {
-            Snackbar.Add("Pflichtfelder fehlen.", Severity.Warning); return;
+        _isLoading = true;
+        try
+        {
+            _masterData = await Http.GetFromJsonAsync<MasterDataDto>("api/settings/masterdata") ?? new();
+            _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/asset-lifecycle") ?? new();
+            _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new();
+            
+            if (string.IsNullOrWhiteSpace(_masterData.AssetTagPattern)) _masterData.AssetTagPattern = "{COMP}-{LOC}-{CAT}-{NUM:5}";
+            _tempPrimaryColor = ThemeService.Config.PrimaryColor;
+            _ = CheckForUpdates();
         }
-        var res = await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
-        if (res.IsSuccessStatusCode) {
-            Snackbar.Add("Stammdaten gespeichert!", Severity.Success);
-            Nav.NavigateTo(Nav.Uri, forceLoad: true);
-        }
+        catch { Snackbar.Add("Fehler beim Laden", Severity.Error); }
+        finally { _isLoading = false; }
     }
+
+    private void OnFieldChanged() => StateHasChanged();
+
+    private async Task SaveSettings()
+    {
+        _isSaving = true;
+        try
+        {
+            if (_activeSection == "MasterData" || _activeSection == "TagSchema")
+                await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
+            else if (_activeSection == "Lifecycle")
+                await Http.PostAsJsonAsync("api/settings/asset-lifecycle", _lifecycleConfig);
+            
+            Snackbar.Add("Konfiguration erfolgreich gespeichert.", Severity.Success);
+        }
+        catch { Snackbar.Add("Fehler beim Speichern.", Severity.Error); }
+        finally { _isSaving = false; }
+    }
+
+    private string GetTagPreview()
+    {
+        var pattern = _masterData.AssetTagPattern ?? "{COMP}-{LOC}-{CAT}-{NUM:5}";
+        return pattern.Replace("{COMP}", _masterData.CompanyPrefix ?? "GIT").Replace("{LOC}", "FRA").Replace("{CAT}", "SRV").Replace("{NUM:5}", "00001");
+    }
+
+    private void ApplyTemplateDimensions()
+    {
+        switch (_masterData.LabelTemplate) {
+            case "Brother DK-11201 (29x90mm)": _masterData.LabelWidth = 90; _masterData.LabelHeight = 29; break;
+            case "Brother DK-11209 (29x62mm)": _masterData.LabelWidth = 62; _masterData.LabelHeight = 29; break;
+            case "Zebra Desktop 4x2 (102x51mm)": _masterData.LabelWidth = 102; _masterData.LabelHeight = 51; break;
+            case "Avery Zweckform 70x37mm": _masterData.LabelWidth = 70; _masterData.LabelHeight = 37; break;
+        }
+        OnFieldChanged();
+    }
+
+    private async Task PrintTestLabel()
+    {
+        string tag = GetTagPreview();
+        string assetName = _masterData.PrintAssetName ? "TEST-SERVER-01" : "";
+        string company = _masterData.PrintCompanyName ? _masterData.CompanyName : "";
+        
+        // FIX: Wir nutzen eine CSS-Variable für das @-Symbol, um den Razor-Parser zu umgehen
+        // und ersetzen die fehlerhafte @-Interpolation durch sauberes C#-String-Handling
+        string atSymbol = "@";
+        string labelHtml = $@"
+            <html>
+            <head>
+                <style>
+                    body {{ margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }}
+                    {atSymbol}page {{ size: {_masterData.LabelWidth}mm {_masterData.LabelHeight}mm; margin: 0; }}
+                    .label {{ width: {_masterData.LabelWidth}mm; height: {_masterData.LabelHeight}mm; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: sans-serif; text-align: center; }}
+                    .barcode {{ width: 80%; height: 8mm; background: repeating-linear-gradient(90deg, #000, #000 0.5mm, #fff 0.5mm, #fff 1mm); }}
+                </style>
+            </head>
+            <body onload='window.print();window.close();'>
+                <div class='label'>
+                    <div style='font-size: 8pt; font-weight: bold; border-bottom: 0.2mm solid #eee; width: 100%;'>{company}</div>
+                    <div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%;'>
+                        <div class='barcode'></div>
+                        <div style='font-size: 7pt; font-weight:bold; margin-top:1mm;'>{tag}</div>
+                    </div>
+                    <div style='font-size: 6pt; color: #888; border-top: 0.2mm solid #eee; width: 100%;'>{assetName} InfraDesk</div>
+                </div>
+            </body>
+            </html>";
+
+        await JSRuntime.InvokeVoidAsync("eval", $"var w = window.open('', '_blank'); w.document.write(`{labelHtml.Replace("`", "\\`")}`); w.document.close();");
+    }
+
+    private void OnDarkModeChanged(bool isDark) { ThemeService.Config.IsDark = isDark; ThemeService.UpdateConfig(ThemeService.Config); }
+    private void ApplyColor() { ThemeService.Config.PrimaryColor = _tempPrimaryColor; ThemeService.UpdateConfig(ThemeService.Config); }
+    private void SelectPalette(string hex) { _tempPrimaryColor = hex; ApplyColor(); }
+    private void RemoveStatus(string g, string s) => _lifecycleConfig[g].Remove(s);
+    private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new List<string>(); _lifecycleConfig[g].Add("NEUER STATUS"); OnFieldChanged(); }
 
     private async Task CheckForUpdates()
     {
-        _isCheckingUpdate = true; _isUpToDate = false; _newVersionAvailable = false;
-        var latest = await UpdateService.GetLatestReleaseAsync(_gitHubToken);
-        if (latest != null) {
-            var cleanTag = latest.TagName.TrimStart('v');
-            if (cleanTag != _currentVersion) _newVersionAvailable = true;
-            else _isUpToDate = true;
-        } else Snackbar.Add("Fehler bei der Prüfung.", Severity.Warning);
-        _isCheckingUpdate = false;
-    }
-
-    private void NotifyManualChange() => ThemeService.UpdateConfig(_themeConfig);
-    private void SaveThemeSettings() { ThemeService.UpdateConfig(_themeConfig); Snackbar.Add("Design permanent gespeichert.", Severity.Success); }
-
-    // Lifecycle Logic
-    private async Task LoadLifecycleSettings() {
+        if (_isChecking) return;
+        _isChecking = true; StateHasChanged();
         try {
-            _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/asset-lifecycle");
-            if (_lifecycleConfig != null) foreach (var k in _lifecycleConfig.Keys) { _newStatusInputs[k] = ""; _phaseRenames[k] = k; }
+            var res = await Http.GetFromJsonAsync<JsonElement>("https://api.github.com/repos/cmwg71/InfraDesk/releases/latest");
+            _latestVersion = res.GetProperty("tag_name").GetString() ?? "";
+            _updateFound = _latestVersion != _currentVersion;
+            _updateChecked = true;
         } catch { }
-    }
-    private void AddStatus(string phase) { if (!string.IsNullOrWhiteSpace(_newStatusInputs[phase])) { _lifecycleConfig?[phase].Add(_newStatusInputs[phase]); _newStatusInputs[phase] = ""; } }
-    private void RemoveStatus(string phase, string status) => _lifecycleConfig?[phase].Remove(status);
-    private void AddPhase() { var name = "Neue Phase"; if (_lifecycleConfig != null && !_lifecycleConfig.ContainsKey(name)) { _lifecycleConfig.Add(name, new List<string>()); _newStatusInputs[name] = ""; _phaseRenames[name] = name; } }
-    private void RemovePhase(string phase) => _lifecycleConfig?.Remove(phase);
-    private async Task SaveLifecycleSettings() {
-        if (_lifecycleConfig == null) return;
-        var final = new Dictionary<string, List<string>>();
-        foreach(var e in _lifecycleConfig) final.Add(_phaseRenames[e.Key], e.Value);
-        var res = await Http.PostAsJsonAsync("api/settings/asset-lifecycle", final);
-        if (res.IsSuccessStatusCode) Snackbar.Add("Lebenszyklus gespeichert!", Severity.Success);
+        finally { _isChecking = false; StateHasChanged(); }
     }
 
-    private void ApplyPreset(string name)
+    public class MasterDataDto
     {
-        var cfg = new ThemeConfig();
-        cfg.FontFamily = _themeConfig.FontFamily;
-        cfg.BaseFontSize = _themeConfig.BaseFontSize;
-        switch (name) {
-            case "Midnight": cfg.IsDark = true; cfg.PrimaryColor = "#3F51B5"; cfg.SecondaryColor = "#5C6BC0"; cfg.BackgroundColor = "#0A0E21"; cfg.SurfaceColor = "#161B33"; cfg.AppbarColor = "#0D1117"; cfg.AppbarText = "#E0E0E0"; cfg.DrawerColor = "#161B33"; cfg.DrawerText = "#E0E0E0"; cfg.DrawerIcon = "#3F51B5"; cfg.TextPrimary = "#E0E0E0"; break;
-            case "Nature": cfg.PrimaryColor = "#2E7D32"; cfg.SecondaryColor = "#689F38"; cfg.BackgroundColor = "#F1F8E9"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#1B5E20"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#1B5E20"; cfg.DrawerIcon = "#2E7D32"; cfg.TextPrimary = "#1B5E20"; break;
-            case "Energy": cfg.PrimaryColor = "#FF6D00"; cfg.SecondaryColor = "#00B8D4"; cfg.BackgroundColor = "#FFF3E0"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#E65100"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#3E2723"; cfg.DrawerIcon = "#FF6D00"; cfg.TextPrimary = "#3E2723"; break;
-            case "Pastel": cfg.PrimaryColor = "#F48FB1"; cfg.SecondaryColor = "#90CAF9"; cfg.BackgroundColor = "#FFF1F6"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#AD1457"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#880E4F"; cfg.DrawerIcon = "#F48FB1"; cfg.TextPrimary = "#880E4F"; break;
-            case "Elegance": cfg.PrimaryColor = "#5D4037"; cfg.SecondaryColor = "#8D6E63"; cfg.BackgroundColor = "#FAF9F6"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#3E2723"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#3E2723"; cfg.DrawerIcon = "#5D4037"; cfg.TextPrimary = "#3E2723"; break;
-            case "Retro": cfg.PrimaryColor = "#E64A19"; cfg.SecondaryColor = "#00796B"; cfg.BackgroundColor = "#FFFDE7"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#BF360C"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#212121"; cfg.DrawerIcon = "#E64A19"; cfg.TextPrimary = "#212121"; break;
-            case "HighContrast": cfg.PrimaryColor = "#FFFF00"; cfg.SecondaryColor = "#FFFFFF"; cfg.BackgroundColor = "#000000"; cfg.SurfaceColor = "#000000"; cfg.AppbarColor = "#000000"; cfg.AppbarText = "#FFFF00"; cfg.DrawerColor = "#000000"; cfg.DrawerText = "#FFFFFF"; cfg.DrawerIcon = "#FFFF00"; cfg.TextPrimary = "#FFFFFF"; break;
-            default: cfg.PrimaryColor = "#1976D2"; cfg.SecondaryColor = "#424242"; cfg.BackgroundColor = "#F0F2F5"; cfg.SurfaceColor = "#FFFFFF"; cfg.AppbarColor = "#333333"; cfg.AppbarText = "#FFFFFF"; cfg.DrawerColor = "#FFFFFF"; cfg.DrawerText = "#424242"; cfg.DrawerIcon = "#1976D2"; cfg.TextPrimary = "#424242"; break;
-        }
-        _themeConfig = cfg; ThemeService.UpdateConfig(cfg); Snackbar.Add($"Preset '{name}' angewendet.", Severity.Info);
+        public string CompanyName { get; set; } = "";
+        public string CompanyPrefix { get; set; } = "";
+        public string Domain { get; set; } = "";
+        public string Street { get; set; } = "";
+        public string ZipCity { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string TimeZoneId { get; set; } = "W. Europe Standard Time";
+        public string AssetTagPattern { get; set; } = "{COMP}-{LOC}-{CAT}-{NUM:5}";
+        public string BarcodeType { get; set; } = "Code128";
+        public bool ShowTextBelowBarcode { get; set; } = true;
+        public string QrErrorCorrection { get; set; } = "M"; 
+        public int LabelWidth { get; set; } = 50; 
+        public int LabelHeight { get; set; } = 30; 
+        public string LabelTemplate { get; set; } = "Custom";
+        public bool IncludeLogoInQr { get; set; } = false;
+        public bool PrintAssetName { get; set; } = true;
+        public bool PrintCompanyName { get; set; } = true;
+        public bool PrintSerialNumber { get; set; } = false;
+        public int PrintResolutionDpi { get; set; } = 300;
     }
 }
