@@ -20,13 +20,16 @@
     /* Kachel Styling */
     .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 24px; text-align: center; flex: 1; background: #fff; position: relative !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
     .stat-card:hover { transform: translateY(-2px); background-color: #fafafa; }
-    .stat-value { font-size: 2.5rem; font-weight: bold; line-height: 1; }
+    .stat-value { font-size: 2.5rem; font-weight: bold; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 12px; }
     .stat-label { font-size: 0.85rem; color: #666; text-transform: uppercase; font-weight: bold; margin-top: 8px; }
     
+    /* Kritikalitäts-Indikator neben der Hauptzahl */
+    .high-prio-badge { font-size: 1.1rem; color: var(--mud-palette-error); background: #fee2e2; padding: 2px 10px; border-radius: 6px; display: flex; align-items: center; border: 1px solid #fecaca; font-weight: 900; }
+
     .activity-row { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; min-height: 54px; }
     .activity-row:last-child { border-bottom: none; }
 
-    /* Quick-Add Button Fix: Erhöhte Priorität und Sichtbarkeit */
+    /* Quick-Add Button Fix */
     .quick-add-btn { position: absolute !important; top: 8px !important; right: 8px !important; z-index: 100 !important; background-color: rgba(255,255,255,0.8) !important; border-radius: 50%; }
     .quick-add-btn:hover { background-color: #fff !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
@@ -64,17 +67,29 @@
                     <div class="stat-label">Gesamt-Assets</div>
                 </div>
 
-                @* Kachel: Offene Tickets mit ITIL-Breakdown (Blitz, Wagen, etc.) *@
+                @* Kachel: Offene Tickets mit ITIL-Breakdown *@
                 <div class="stat-card" style="border-top: 4px solid var(--mud-palette-error);" @onclick="@(() => Nav.NavigateTo("/tickets"))">
                     <MudTooltip Text="Schnellanlage: Neues Ticket">
                         <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Error" Size="Size.Medium" Class="quick-add-btn" 
                                        OnClick="@((e) => Nav.NavigateTo("/tickets/create"))" OnClick:stopPropagation="true" />
                     </MudTooltip>
                     <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Error" Size="Size.Large" />
-                    <div class="stat-value" style="color: var(--mud-palette-error);">@_openTicketsCount</div>
+                    
+                    <div class="stat-value" style="color: var(--mud-palette-error);">
+                        @_openTicketsCount
+                        @if (_highPrioOpenCount > 0)
+                        {
+                            <MudTooltip Text="Davon mit Priorität: HOCH">
+                                <span class="high-prio-badge">
+                                    <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Class="mr-1" />
+                                    @_highPrioOpenCount
+                                </span>
+                            </MudTooltip>
+                        }
+                    </div>
+                    
                     <div class="stat-label">Offene Tickets</div>
 
-                    <!-- Aufteilung nach Ticket-Typen (Symbole aus Ticket-System) -->
                     <div class="prio-breakdown">
                         <MudTooltip Text="Incidents (Störungen)">
                             <div class="prio-item">
@@ -102,52 +117,11 @@
                         </MudTooltip>
                     </div>
                 </div>
-
-                @* Kachel: System-Integrität *@
-                <div class="stat-card" style="border-top: 4px solid var(--mud-palette-success);">
-                    <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Large" />
-                    <div class="stat-value" style="color: var(--mud-palette-success);">100%</div>
-                    <div class="stat-label">Integrität</div>
-                </div>
             </div>
 
-            <!-- DUAL VIEW: TICKET VERLAUF & ASSET VERLAUF -->
+            <!-- DUAL VIEW: ASSET VERLAUF (Links) & TICKET VERLAUF (Rechts) -->
             <MudGrid Spacing="3">
-                <MudItem xs="12" md="6">
-                    <div class="section-box">
-                        <div class="section-header-compact">Ticket Verlauf</div>
-                        <div class="d-flex flex-column">
-                            @if (_recentTickets != null && _recentTickets.Any())
-                            {
-                                @foreach (var ticket in _recentTickets)
-                                {
-                                    <div class="activity-row">
-                                        @* Hier ebenfalls die ITIL-Icons für den Verlauf *@
-                                        <MudIcon Icon="@GetItilIcon(ticket.Category1)" Size="Size.Small" Color="@GetItilColor(ticket.Category1)" />
-                                        <div class="d-flex flex-column flex-grow-1">
-                                            <div class="d-flex justify-space-between align-center">
-                                                <MudLink Href="@($"/tickets/{ticket.Id}")" Typo="Typo.body2" Class="font-weight-bold" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
-                                                    #@ticket.TicketNumber - @ticket.Title
-                                                </MudLink>
-                                                <span style="font-size: 0.72rem; color: #888;">@ThemeService.FormatDate(ticket.CreatedAt)</span>
-                                            </div>
-                                            <div class="d-flex align-center">
-                                                <span style="font-size: 0.75rem; color: #666;">Status: <b>@ticket.Status</b></span>
-                                                <MudSpacer />
-                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@(ticket.Priority == "Hoch" ? Color.Error : Color.Default)" Class="ma-0 pa-0" Style="font-size: 0.7rem; height: 18px;">@ticket.Priority</MudChip>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }
-                            else
-                            {
-                                <div class="pa-8 text-center" style="color: #888;">Keine aktiven Tickets vorhanden.</div>
-                            }
-                        </div>
-                    </div>
-                </MudItem>
-
+                @* Asset Verlauf nach links verschoben *@
                 <MudItem xs="12" md="6">
                     <div class="section-box">
                         <div class="section-header-compact">Asset Verlauf</div>
@@ -182,6 +156,41 @@
                         </div>
                     </div>
                 </MudItem>
+
+                @* Ticket Verlauf nach rechts verschoben *@
+                <MudItem xs="12" md="6">
+                    <div class="section-box">
+                        <div class="section-header-compact">Ticket Verlauf</div>
+                        <div class="d-flex flex-column">
+                            @if (_recentTickets != null && _recentTickets.Any())
+                            {
+                                @foreach (var ticket in _recentTickets)
+                                {
+                                    <div class="activity-row">
+                                        <MudIcon Icon="@GetItilIcon(ticket.Category1)" Size="Size.Small" Color="@GetItilColor(ticket.Category1)" />
+                                        <div class="d-flex flex-column flex-grow-1">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudLink Href="@($"/tickets/{ticket.Id}")" Typo="Typo.body2" Class="font-weight-bold" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
+                                                    #@ticket.TicketNumber - @ticket.Title
+                                                </MudLink>
+                                                <span style="font-size: 0.72rem; color: #888;">@ThemeService.FormatDate(ticket.CreatedAt)</span>
+                                            </div>
+                                            <div class="d-flex align-center">
+                                                <span style="font-size: 0.75rem; color: #666;">Status: <b>@ticket.Status</b></span>
+                                                <MudSpacer />
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@(ticket.Priority == "Hoch" ? Color.Error : Color.Default)" Class="ma-0 pa-0" Style="font-size: 0.7rem; height: 18px;">@ticket.Priority</MudChip>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="pa-8 text-center" style="color: #888;">Keine aktiven Tickets vorhanden.</div>
+                            }
+                        </div>
+                    </div>
+                </MudItem>
             </MudGrid>
         }
     </div>
@@ -191,8 +200,8 @@
     private bool _isLoading = true;
     private int _assetsCount = 0;
     private int _openTicketsCount = 0;
+    private int _highPrioOpenCount = 0;
 
-    // Zähler für ITIL-Kategorien (als "Kritikalität" im Dashboard)
     private int _incidentCount = 0;
     private int _requestCount = 0;
     private int _changeCount = 0;
@@ -208,33 +217,24 @@
         _isLoading = true;
         try
         {
-            // 1. Assets laden
             var allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new();
             _assetsCount = allAssets.Count;
             _recentAssets = allAssets.OrderByDescending(a => a.Id).Take(5).ToList();
 
-            // 2. Tickets laden
             var allTickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets") ?? new();
             var openTickets = allTickets.Where(t => t.Status != "GESCHLOSSEN").ToList();
             
             _openTicketsCount = openTickets.Count;
+            _highPrioOpenCount = openTickets.Count(t => t.Priority == "Hoch");
 
-            // Aufteilung nach ITIL-Kategorien berechnen (identisch zum Ticket System)
             _incidentCount = openTickets.Count(t => t.Category1 == "Incident (Störung)");
             _requestCount = openTickets.Count(t => t.Category1 == "Service Request (Serviceanfrage)");
             _changeCount = openTickets.Count(t => t.Category1 == "Change (Änderung)");
             _problemCount = openTickets.Count(t => t.Category1 == "Problem (Problem)");
 
-            // Ticket Verlauf
-            _recentTickets = openTickets
-                .OrderByDescending(t => t.CreatedAt)
-                .Take(5)
-                .ToList();
+            _recentTickets = openTickets.OrderByDescending(t => t.CreatedAt).Take(5).ToList();
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Dashboard Data Error: {ex.Message}");
-        }
+        catch (Exception ex) { Console.WriteLine($"Dashboard Data Error: {ex.Message}"); }
         finally { _isLoading = false; }
     }
 
