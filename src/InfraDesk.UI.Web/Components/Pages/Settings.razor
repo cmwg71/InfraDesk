@@ -55,15 +55,15 @@
     <div class="pdq-sidebar">
         <MudNavMenu Margin="Margin.Dense" Rounded="false">
             <div class="pdq-section-header">Mandant & Organisation</div>
-            <MudNavLink OnClick="@(() => _activeSection = "MasterData")" Class="@(_activeSection == "MasterData" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
-            <MudNavLink OnClick="@(() => _activeSection = "Lifecycle")" Class="@(_activeSection == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
-            <MudNavLink OnClick="@(() => _activeSection = "TagSchema")" Class="@(_activeSection == "TagSchema" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
+            <MudNavLink OnClick="@(() => SetActiveSection("MasterData"))" Class="@GetActiveCss("MasterData")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
+            <MudNavLink OnClick="@(() => SetActiveSection("Lifecycle"))" Class="@GetActiveCss("Lifecycle")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
+            <MudNavLink OnClick="@(() => SetActiveSection("TagSchema"))" Class="@GetActiveCss("TagSchema")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
             
             <div class="pdq-section-header">UI & Personalisierung</div>
-            <MudNavLink OnClick="@(() => _activeSection = "Design")" Class="@(_activeSection == "Design" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Palette">Farben & Themes</MudNavLink>
+            <MudNavLink OnClick="@(() => SetActiveSection("Design"))" Class="@GetActiveCss("Design")" Icon="@Icons.Material.Filled.Palette">Farben & Themes</MudNavLink>
             
             <div class="pdq-section-header">System & Service</div>
-            <MudNavLink OnClick="@(() => _activeSection = "Info")" Class="@(_activeSection == "Info" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Update">Update & Info</MudNavLink>
+            <MudNavLink OnClick="@(() => SetActiveSection("Info"))" Class="@GetActiveCss("Info")" Icon="@Icons.Material.Filled.Update">Update & Info</MudNavLink>
         </MudNavMenu>
     </div>
 
@@ -292,11 +292,15 @@
             
             if (string.IsNullOrWhiteSpace(_masterData.AssetTagPattern)) _masterData.AssetTagPattern = "{COMP}-{LOC}-{CAT}-{NUM:5}";
             _tempPrimaryColor = ThemeService.Config.PrimaryColor;
+            
             _ = CheckForUpdates();
         }
-        catch { Snackbar.Add("Fehler beim Laden", Severity.Error); }
+        catch { Snackbar.Add("Fehler beim Laden der Einstellungen.", Severity.Error); }
         finally { _isLoading = false; }
     }
+
+    private void SetActiveSection(string section) => _activeSection = section;
+    private string GetActiveCss(string section) => _activeSection == section ? "sidebar-active" : "";
 
     private void OnFieldChanged() => StateHasChanged();
 
@@ -312,7 +316,7 @@
             
             Snackbar.Add("Konfiguration erfolgreich gespeichert.", Severity.Success);
         }
-        catch { Snackbar.Add("Fehler beim Speichern.", Severity.Error); }
+        catch { Snackbar.Add("Fehler beim Speichern der Einstellungen.", Severity.Error); }
         finally { _isSaving = false; }
     }
 
@@ -335,43 +339,62 @@
 
     private async Task PrintTestLabel()
     {
+        // 100% sauberer C# Code ohne Razor-Parser Fallstricke
         string tag = GetTagPreview();
-        string assetName = _masterData.PrintAssetName ? "TEST-SERVER-01" : "";
         string company = _masterData.PrintCompanyName ? _masterData.CompanyName : "";
+        string assetName = _masterData.PrintAssetName ? "TEST-SERVER-01" : "";
+        string serial = _masterData.PrintSerialNumber ? "| SN-9938" : "";
         
-        // FIX: Wir nutzen eine CSS-Variable für das @-Symbol, um den Razor-Parser zu umgehen
-        // und ersetzen die fehlerhafte @-Interpolation durch sauberes C#-String-Handling
-        string atSymbol = "@";
-        string labelHtml = $@"
-            <html>
-            <head>
-                <style>
-                    body {{ margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }}
-                    {atSymbol}page {{ size: {_masterData.LabelWidth}mm {_masterData.LabelHeight}mm; margin: 0; }}
-                    .label {{ width: {_masterData.LabelWidth}mm; height: {_masterData.LabelHeight}mm; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: sans-serif; text-align: center; }}
-                    .barcode {{ width: 80%; height: 8mm; background: repeating-linear-gradient(90deg, #000, #000 0.5mm, #fff 0.5mm, #fff 1mm); }}
-                </style>
-            </head>
-            <body onload='window.print();window.close();'>
-                <div class='label'>
-                    <div style='font-size: 8pt; font-weight: bold; border-bottom: 0.2mm solid #eee; width: 100%;'>{company}</div>
-                    <div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%;'>
-                        <div class='barcode'></div>
-                        <div style='font-size: 7pt; font-weight:bold; margin-top:1mm;'>{tag}</div>
-                    </div>
-                    <div style='font-size: 6pt; color: #888; border-top: 0.2mm solid #eee; width: 100%;'>{assetName} InfraDesk</div>
-                </div>
-            </body>
-            </html>";
+        string qrSvg = "<svg viewBox='0 0 24 24' fill='black' width='48' height='48'><path d='M3 3H9V9H3V3ZM5 5V7H7V5H5ZM15 3H21V9H15V3ZM17 5V7H19V5H17ZM3 15H9V21H3V15ZM5 17V19H7V17H5ZM15 15H17V17H15V15ZM17 17H19V19H17V17ZM19 15H21V17H19V15ZM15 19H17V21H15V19ZM19 19H21V21H19V19ZM17 13H19V15H17V13ZM13 3H15V5H13V3ZM11 3H13V5H11V3ZM13 11H15V13H13V11ZM11 11H13V13H11V11ZM11 13H13V15H11V13ZM13 15H15V17H13V15ZM3 11H5V13H3V11ZM5 11H7V13H5V11ZM7 11H9V13H7V11ZM3 13H5V15H3V13ZM5 13H7V15H5V13ZM7 13H9V15H7V13ZM11 7H13V9H11V7ZM13 7H15V9H13V7ZM11 9H13V11H11V9ZM13 9H15V11H13V9ZM15 11H17V13H15V11ZM17 11H19V13H17V11ZM19 11H21V13H19V11ZM21 11H23V13H21V11ZM21 13H23V15H21V13ZM21 15H23V17H21V15ZM21 17H23V19H21V17ZM21 19H23V21H21V19ZM19 21H21V23H19V21ZM17 21H19V23H17V21ZM15 21H17V23H15V21ZM13 21H15V23H13V21ZM11 21H13V23H11V21ZM9 21H11V23H9V21ZM7 21H9V23H7V21ZM5 21H7V23H5V21ZM3 21H5V23H3V21Z'/></svg>";
 
-        await JSRuntime.InvokeVoidAsync("eval", $"var w = window.open('', '_blank'); w.document.write(`{labelHtml.Replace("`", "\\`")}`); w.document.close();");
+        string companyHtml = string.IsNullOrEmpty(company) ? "" : "<div style='font-size: 8pt; font-weight: bold; border-bottom: 0.1mm solid #eee; width: 100%; padding-bottom: 0.5mm; margin-bottom: 1mm;'>" + company + "</div>";
+        string tagHtml = _masterData.ShowTextBelowBarcode ? "<div style='font-size: 7pt; font-weight:bold; font-family: monospace;'>" + tag + "</div>" : "";
+        string footerHtml = "<div style='font-size: 6pt; color: #444; border-top: 0.1mm solid #eee; width: 100%; padding-top: 0.5mm;'>" + assetName + " " + serial + "</div>";
+
+        string html = "<html><head><style>" +
+            "body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; background: white; } " +
+            "@page { size: " + _masterData.LabelWidth + "mm " + _masterData.LabelHeight + "mm; margin: 0; } " +
+            ".label { width: " + _masterData.LabelWidth + "mm; height: " + _masterData.LabelHeight + "mm; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: sans-serif; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; } " +
+            ".barcode { width: 100%; height: 8mm; background: repeating-linear-gradient(90deg, #000, #000 0.5mm, #fff 0.5mm, #fff 1mm); margin-bottom: 1mm; } " +
+            ".content { display: flex; width: 100%; align-items: center; justify-content: space-around; flex: 1; } " +
+            ".qr { width: 12mm; height: 12mm; }" +
+            "</style></head><body onload='window.print();window.close();'>" +
+            "<div class='label'>" + companyHtml + 
+            "<div class='content'><div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden;'>" +
+            "<div class='barcode'></div>" + tagHtml + "</div><div class='qr'>" + qrSvg + "</div></div>" +
+            footerHtml + "</div></body></html>";
+
+        // Verschlüsselt das HTML in Base64, damit im JavaScript keine Quotes-Fehler entstehen
+        string base64Html = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html));
+        await JSRuntime.InvokeVoidAsync("eval", "var w = window.open('', '_blank'); w.document.write(atob('" + base64Html + "')); w.document.close();");
     }
 
-    private void OnDarkModeChanged(bool isDark) { ThemeService.Config.IsDark = isDark; ThemeService.UpdateConfig(ThemeService.Config); }
-    private void ApplyColor() { ThemeService.Config.PrimaryColor = _tempPrimaryColor; ThemeService.UpdateConfig(ThemeService.Config); }
+    private void OnDarkModeChanged(bool isDark) { 
+        var cfg = ThemeService.Config;
+        cfg.IsDark = isDark; 
+        ThemeService.UpdateConfig(cfg); 
+    }
+    
+    private void ApplyColor() { 
+        var cfg = ThemeService.Config;
+        cfg.PrimaryColor = _tempPrimaryColor; 
+        ThemeService.UpdateConfig(cfg); 
+    }
+    
     private void SelectPalette(string hex) { _tempPrimaryColor = hex; ApplyColor(); }
-    private void RemoveStatus(string g, string s) => _lifecycleConfig[g].Remove(s);
-    private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new List<string>(); _lifecycleConfig[g].Add("NEUER STATUS"); OnFieldChanged(); }
+    
+    private void RemoveStatus(string g, string s) {
+        if (_lifecycleConfig.ContainsKey(g)) {
+            _lifecycleConfig[g].Remove(s);
+            OnFieldChanged();
+        }
+    }
+    
+    private void AddStatus(string g) { 
+        if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new List<string>(); 
+        _lifecycleConfig[g].Add("NEUER STATUS"); 
+        OnFieldChanged(); 
+    }
 
     private async Task CheckForUpdates()
     {
