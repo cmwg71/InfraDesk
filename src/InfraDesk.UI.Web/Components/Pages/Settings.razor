@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
+@inject UpdateService UpdateService
 
 <PageTitle>InfraDesk - Einstellungen</PageTitle>
 
@@ -31,6 +32,9 @@
     .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
     .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
     .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
+    
+    /* Monochromatischer Logo-Stil für den Info-Bereich */
+    .info-logo-monochrome { height: 60px; margin-bottom: 16px; filter: grayscale(100%) brightness(0); opacity: 0.8; }
 </style>
 
 <div class="pdq-toolbar">
@@ -75,7 +79,7 @@
                 <div class="pdq-section-header">Organisation & Anschrift</div>
                 <MudGrid Spacing="2">
                     <MudItem xs="12" md="8"><MudTextField @bind-Value="_masterData.CompanyName" Label="Offizieller Firmenname" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
-                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präfix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präprefix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
                     <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Domain" Label="E-Mail Domäne" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="firma.de" /></MudItem>
                     
                     <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Street" Label="Straße & Hausnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
@@ -311,17 +315,24 @@
             else if (_activeSection == "Info")
             {
                 <div class="text-center mb-8">
-                    <img src="InfraDesk_Logo.png" alt="InfraDesk" style="height: 60px; margin-bottom: 16px;" />
+                    @* KORREKTUR: Logo nutzt nun einfarbige Optik via CSS-Filter *@
+                    <img src="InfraDesk_Logo.png" alt="InfraDesk" class="info-logo-monochrome" />
                     <MudText Typo="Typo.h4" Style="font-weight: 900; color: #333;">InfraDesk Enterprise</MudText>
                 </div>
                 <div class="info-grid">
                     <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-2" /> Version</div>
                     <div class="info-value">
                         @_currentVersion
-                        @if (_isChecking) { <MudProgressCircular Color="Color.Default" Indeterminate="true" Size="Size.Small" Class="ml-4" Style="width:16px; height:16px;"/> }
+                        @if (_isChecking) { 
+                            <MudProgressCircular Color="Color.Default" Indeterminate="true" Size="Size.Small" Class="ml-4" Style="width:16px; height:16px;"/> 
+                        }
                         else if (_updateChecked) {
-                            @if (_updateFound) { <span class="status-update-text ml-4"><MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" /> Update verfügbar (@_latestVersion)</span> }
-                            else { <span class="status-ok-text ml-4"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" /> Version aktuell</span> }
+                            @if (_updateFound) { 
+                                <span class="status-update-text ml-4"><MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" /> Update verfügbar (@_latestVersion)</span> 
+                            }
+                            else { 
+                                <span class="status-ok-text ml-4"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" /> Version aktuell</span> 
+                            }
                         }
                     </div>
                     <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" Class="mr-2" /> Entwicklung</div>
@@ -347,7 +358,8 @@
     private string _tempPrimaryColor = "#004a99";
     private string _selectedPalette = "Corporate Blue";
 
-    private string _currentVersion = "2026.5.2.127";
+    // Dynamische Ermittlung der Version aus der Assembly
+    private string _currentVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unbekannt";
     private bool _isChecking = false;
     private bool _updateChecked = false;
     private bool _updateFound = false;
@@ -364,11 +376,11 @@
             
             if (string.IsNullOrWhiteSpace(_masterData.AssetTagPattern)) _masterData.AssetTagPattern = "{COMP}-{LOC}-{CAT}-{NUM:5}";
             
-            // Initialisiere leere Listen sicherheitshalber
             _masterData.TicketStatusList ??= new();
             _masterData.TicketPriorityList ??= new();
             
             _tempPrimaryColor = ThemeService.Config.PrimaryColor;
+            
             _ = CheckForUpdates();
         }
         catch { Snackbar.Add("Fehler beim Laden der Einstellungen.", Severity.Error); }
@@ -393,7 +405,6 @@
         finally { _isSaving = false; }
     }
     
-    // Geniale Hilfsfunktion: Erkennt aus dem Text-Namen direkt das SVG-Icon von MudBlazor!
     private string GetDynamicIcon(string? iconName) {
         if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
         try {
@@ -480,17 +491,28 @@
     private async Task CheckForUpdates()
     {
         if (_isChecking) return;
-        _isChecking = true; StateHasChanged();
-        try {
-            var res = await Http.GetFromJsonAsync<JsonElement>("https://api.github.com/repos/cmwg71/InfraDesk/releases/latest");
-            _latestVersion = res.GetProperty("tag_name").GetString() ?? "";
-            _updateFound = _latestVersion != _currentVersion;
-            _updateChecked = true;
-        } catch { }
-        finally { _isChecking = false; StateHasChanged(); }
+        _isChecking = true; 
+        await InvokeAsync(StateHasChanged);
+        
+        try 
+        {
+            var release = await UpdateService.GetLatestReleaseAsync();
+            if (release != null && !string.IsNullOrWhiteSpace(release.TagName)) 
+            {
+                _latestVersion = release.TagName;
+                string cleanLatest = _latestVersion.TrimStart('v', 'V');
+                _updateFound = cleanLatest != _currentVersion;
+                _updateChecked = true;
+            }
+        } 
+        catch { }
+        finally 
+        { 
+            _isChecking = false; 
+            await InvokeAsync(StateHasChanged); 
+        }
     }
 
-    // --- NEUE STRUKTUREN FÜR FARBEN & ICONS (Korrekter JSON Parse Typ) ---
     public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
     public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
@@ -517,11 +539,8 @@
         public bool PrintSerialNumber { get; set; } = false;
         public int PrintResolutionDpi { get; set; } = 300;
         
-        // Ticket Settings
         public string TicketDefaultFilter { get; set; } = "Alle";
         public bool TicketShowClosed { get; set; } = false;
-        
-        // WICHTIG: Ersetzt die alten "OFFEN,AKTIV"-Strings durch strukturierte Listen
         public List<TicketStatusItem> TicketStatusList { get; set; } = new();
         public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }
