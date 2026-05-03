@@ -23,6 +23,10 @@
     .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 16px; margin-top: 24px; }
     .pdq-section-header:first-child { margin-top: 0; border-top: none; }
     
+    .master-detail-grid { display: grid; grid-template-columns: 350px 1fr; border: 1px solid #ccc; border-radius: 4px; background: #fff; min-height: 60vh; }
+    .master-pane { border-right: 1px solid #ccc; background: #fafafa; padding: 12px; overflow-y: auto; }
+    .detail-pane { padding: 24px; overflow-y: auto; }
+
     .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 20px; background-color: #fafafa; border-radius: 8px; border: 1px solid #eee; margin-bottom: 24px; }
     .info-label { font-weight: bold; color: #666; font-size: 0.85rem; display: flex; align-items: center; }
     .info-value { font-weight: 600; color: #333; font-size: 0.9rem; display: flex; align-items: center; }
@@ -31,7 +35,6 @@
     .status-update-text { color: #c62828; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; background: #ffebee; padding: 4px 12px; border-radius: 4px; border: 1px solid #ffcdd2; }
     .status-error-text { color: #666; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; background: #f5f5f5; padding: 4px 12px; border-radius: 4px; border: 1px solid #e0e0e0; }
     
-    .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
     .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
     .info-logo-monochrome { height: 60px; margin-bottom: 16px; filter: grayscale(100%) brightness(0); opacity: 0.8; }
 
@@ -49,7 +52,7 @@
     <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
     <MudText Typo="Typo.body2" Class="font-weight-bold">System-Konfiguration</MudText>
     <MudSpacer />
-    @if (_activeSection != "Info" && _activeSection != "AssetTypes")
+    @if (_activeSection != "Info")
     {
         <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettings" Loading="_isSaving">Speichern</MudButton>
     }
@@ -60,9 +63,11 @@
         <MudNavMenu Margin="Margin.Dense" Rounded="false">
             <div class="pdq-section-header">Mandant & Organisation</div>
             <MudNavLink OnClick="@(() => _activeSection = "MasterData")" Class="@(_activeSection == "MasterData" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Locations")" Class="@(_activeSection == "Locations" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.LocationCity">Standorte & Räume</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Persons")" Class="@(_activeSection == "Persons" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.People">Personen & Teams</MudNavLink>
             <MudNavLink OnClick="@(() => _activeSection = "Lifecycle")" Class="@(_activeSection == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
             <MudNavLink OnClick="@(() => _activeSection = "TagSchema")" Class="@(_activeSection == "TagSchema" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
-            <MudNavLink OnClick="@(() => _activeSection = "AssetTypes")" Class="@(_activeSection == "AssetTypes" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Category">Asset Kategorien</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "AssetTypes")" Class="@(_activeSection == "AssetTypes" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.AccountTree">Asset Kategorien</MudNavLink>
             
             <div class="pdq-section-header">Service-Desk / ITSM</div>
             <MudNavLink OnClick="@(() => _activeSection = "TicketViews")" Class="@(_activeSection == "TicketViews" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.FilterAlt">Standard-Ansichten</MudNavLink>
@@ -83,94 +88,157 @@
         }
         else
         {
-            @if (_activeSection == "MasterData")
+            @if (_activeSection == "AssetTypes")
             {
-                <div class="pdq-section-header">Organisation & Anschrift</div>
+                <div class="pdq-section-header">Asset Kategorien (Taxonomie-Baum)</div>
+                <div class="master-detail-grid">
+                    <div class="master-pane">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.Add" Class="mb-4" OnClick="AddAssetType">Neue Kategorie</MudButton>
+                        <MudTreeView T="Guid?" SelectedValue="@_editCategoryId" SelectedValueChanged="OnCategorySelected" Hover="true" Dense="true" Color="Color.Primary">
+                            @RenderCategoryTreeNodes(_dynamicAssetTypes.Where(t => t.ParentAssetTypeId == null).OrderBy(t => t.Name))
+                        </MudTreeView>
+                    </div>
+                    <div class="detail-pane">
+                        @if (_editCategory != null)
+                        {
+                            <MudText Typo="Typo.h6" Class="mb-4">Kategorie bearbeiten</MudText>
+                            <MudTextField @bind-Value="_editCategory.Name" Label="Kategorie-Name" Variant="Variant.Outlined" Required="true" Class="mb-4" />
+                            <MudTextField @bind-Value="_editCategory.Description" Label="Beschreibung" Variant="Variant.Outlined" Lines="2" Class="mb-4" />
+                            <MudSelect T="Guid?" @bind-Value="_editCategory.ParentAssetTypeId" Label="Übergeordnete Kategorie" Clearable="true" Variant="Variant.Outlined" Class="mb-4">
+                                @foreach(var parent in _dynamicAssetTypes.Where(t => t.Id != _editCategory.Id).OrderBy(t => t.Name)) {
+                                    <MudSelectItem T="Guid?" Value="@parent.Id">@GetCategoryPath(parent.Id)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudSelect T="string" @bind-Value="_editCategory.IconKey" Label="Symbol (Icon)" Variant="Variant.Outlined" Class="mb-6">
+                                @foreach(var icon in _availableIcons) {
+                                    <MudSelectItem Value="@icon"><div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(icon)" Size="Size.Small" Class="mr-3"/> @icon</div></MudSelectItem>
+                                }
+                            </MudSelect>
+                            <div class="d-flex gap-2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveCategory">Speichern</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCategory">Löschen</MudButton>
+                            </div>
+                        }
+                        else { <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-10 text-center">Wählen Sie links eine Kategorie aus oder erstellen Sie eine neue.</MudText> }
+                    </div>
+                </div>
+            }
+            else if (_activeSection == "Locations")
+            {
+                <div class="pdq-section-header">Standorte, Gebäude & Räume</div>
+                <div class="master-detail-grid">
+                    <div class="master-pane">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.Add" Class="mb-4" OnClick="AddLocation">Neuer Standort</MudButton>
+                        <MudTreeView T="Guid?" SelectedValue="@_editLocationId" SelectedValueChanged="OnLocationSelected" Hover="true" Dense="true" Color="Color.Primary">
+                            @RenderLocationTreeNodes(_locations.Where(l => l.ParentLocationId == null).OrderBy(l => l.Name))
+                        </MudTreeView>
+                    </div>
+                    <div class="detail-pane">
+                        @if (_editLocation != null)
+                        {
+                            <MudText Typo="Typo.h6" Class="mb-4">Standort bearbeiten</MudText>
+                            <MudTextField @bind-Value="_editLocation.Name" Label="Standort / Raumname" Variant="Variant.Outlined" Required="true" Class="mb-4" />
+                            <MudTextField @bind-Value="_editLocation.Address" Label="Adresse / Details" Variant="Variant.Outlined" Class="mb-4" />
+                            <MudTextField @bind-Value="_editLocation.RoomNumber" Label="Raum-Nummer" Variant="Variant.Outlined" Class="mb-4" />
+                            <MudSelect T="Guid?" @bind-Value="_editLocation.ParentLocationId" Label="Übergeordneter Standort (Hierarchie)" Clearable="true" Variant="Variant.Outlined" Class="mb-6">
+                                @foreach(var loc in _locations.Where(l => l.Id != _editLocation.Id).OrderBy(l => GetLocationPath(l.Id))) {
+                                    <MudSelectItem T="Guid?" Value="@loc.Id">@GetLocationPath(loc.Id)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <div class="d-flex gap-2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveLocation">Speichern</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteLocation">Löschen</MudButton>
+                            </div>
+                        }
+                        else { <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-10 text-center">Wählen Sie links einen Standort aus.</MudText> }
+                    </div>
+                </div>
+            }
+            else if (_activeSection == "Persons")
+            {
+                <div class="pdq-section-header">Teams & Personen</div>
+                <div class="master-detail-grid">
+                    <div class="master-pane">
+                        <div class="d-flex gap-2 mb-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AddTeam">Team</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddPerson">Person</MudButton>
+                        </div>
+                        <MudTreeView T="string" SelectedValue="@_editOrgId" SelectedValueChanged="OnOrgSelected" Hover="true" Dense="true" Color="Color.Primary">
+                            @foreach (var team in _teams.OrderBy(t => t.Name)) {
+                                <MudTreeViewItem T="string" Value="@($"TEAM_{team.Id}")" Text="@team.Name" Icon="@Icons.Material.Filled.Groups" Expanded="true">
+                                    @foreach (var person in _personsByTeam[team.Id].OrderBy(p => p.LastName)) {
+                                        <MudTreeViewItem T="string" Value="@($"PERS_{person.Id}")" Text="@($"{person.LastName}, {person.FirstName}")" Icon="@Icons.Material.Filled.Person" />
+                                    }
+                                </MudTreeViewItem>
+                            }
+                            @if (_personsByTeam[null].Any()) {
+                                <MudTreeViewItem T="string" Value="@("NO_TEAM")" Text="Ohne Team-Zuweisung" Icon="@Icons.Material.Filled.FolderOff" Expanded="true">
+                                    @foreach (var person in _personsByTeam[null].OrderBy(p => p.LastName)) {
+                                        <MudTreeViewItem T="string" Value="@($"PERS_{person.Id}")" Text="@($"{person.LastName}, {person.FirstName}")" Icon="@Icons.Material.Filled.Person" />
+                                    }
+                                </MudTreeViewItem>
+                            }
+                        </MudTreeView>
+                    </div>
+                    <div class="detail-pane">
+                        @if (_editTeam != null) {
+                            <MudText Typo="Typo.h6" Class="mb-4">Team bearbeiten</MudText>
+                            <MudTextField @bind-Value="_editTeam.Name" Label="Team-Name" Variant="Variant.Outlined" Required="true" Class="mb-4" />
+                            <MudSelect T="Guid?" @bind-Value="_editTeam.LeadId" Label="Team-Leitung (Lead)" Clearable="true" Variant="Variant.Outlined" Class="mb-6">
+                                @foreach(var p in _persons.OrderBy(x => x.LastName)) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                            </MudSelect>
+                            <div class="d-flex gap-2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTeam">Speichern</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteTeam">Löschen</MudButton>
+                            </div>
+                        } else if (_editPerson != null) {
+                            <MudText Typo="Typo.h6" Class="mb-4">Person bearbeiten</MudText>
+                            <MudGrid Spacing="2" Class="mb-4">
+                                <MudItem xs="6"><MudTextField @bind-Value="_editPerson.FirstName" Label="Vorname" Variant="Variant.Outlined" Required="true" /></MudItem>
+                                <MudItem xs="6"><MudTextField @bind-Value="_editPerson.LastName" Label="Nachname" Variant="Variant.Outlined" Required="true" /></MudItem>
+                                <MudItem xs="12"><MudTextField @bind-Value="_editPerson.Email" Label="E-Mail Adresse" Variant="Variant.Outlined" /></MudItem>
+                                <MudItem xs="6">
+                                    <MudSelect T="Guid?" @bind-Value="_editPerson.TeamId" Label="Team-Zuweisung" Clearable="true" Variant="Variant.Outlined">
+                                        @foreach(var t in _teams.OrderBy(x => x.Name)) { <MudSelectItem T="Guid?" Value="@t.Id">@t.Name</MudSelectItem> }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="6"><MudTextField @bind-Value="_editPerson.Department" Label="Freitext-Abteilung" Variant="Variant.Outlined" /></MudItem>
+                                <MudItem xs="12">
+                                    <MudSelect T="string" @bind-Value="_editPerson.SystemRole" Label="System-Rechte (Rolle)" Variant="Variant.Outlined" Class="mb-4">
+                                        <MudSelectItem Value="@("Reader")">Reader (Nur Lesezugriff)</MudSelectItem>
+                                        <MudSelectItem Value="@("CI Editor")">CI Editor (Support / Agent)</MudSelectItem>
+                                        <MudSelectItem Value="@("Tenant Admin")">Tenant Admin</MudSelectItem>
+                                        <MudSelectItem Value="@("Global Admin")">Global Admin</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                            </MudGrid>
+                            <div class="d-flex gap-2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SavePerson">Speichern</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeletePerson">Löschen</MudButton>
+                            </div>
+                        } else {
+                            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-10 text-center">Wählen Sie links ein Team oder eine Person aus.</MudText>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_activeSection == "MasterData")
+            {
+                <div class="pdq-section-header">Organisation & Mandant</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier den internen System-Mandantennamen sowie den offiziellen Firmennamen (für Berichte und Etiketten).</MudText>
+                
                 <MudGrid Spacing="2">
-                    <MudItem xs="12" md="8"><MudTextField @bind-Value="_masterData.CompanyName" Label="Offizieller Firmenname" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.TenantName" Label="System-Mandantenname (Anzeige oben links)" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" HelperText="z.B. IT-Betrieb" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_masterData.CompanyName" Label="Offizieller Firmenname" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" HelperText="Wird auf Etiketten gedruckt." /></MudItem>
+                    
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präfix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
-                    <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Domain" Label="E-Mail Domäne" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="firma.de" /></MudItem>
+                    <MudItem xs="12" md="8"><MudTextField @bind-Value="_masterData.Domain" Label="E-Mail Domäne" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="firma.de" /></MudItem>
+                    
                     <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Street" Label="Straße & Hausnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.ZipCity" Label="PLZ & Ort" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.State" Label="Bundesland" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.Country" Label="Land" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                 </MudGrid>
-
-                <div class="pdq-section-header mt-8">Regional-Einstellungen</div>
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" md="6">
-                        <MudSelect T="string" Label="System-Zeitzone" @bind-Value="_masterData.TimeZoneId" Variant="Variant.Outlined" Margin="Margin.Dense">
-                            @foreach (var tz in _timeZones) { <MudSelectItem Value="@tz">@tz</MudSelectItem> }
-                        </MudSelect>
-                    </MudItem>
-                </MudGrid>
-            }
-            else if (_activeSection == "Lifecycle")
-            {
-                <div class="pdq-section-header">Asset-Lebenszyklus Phasen & Status</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, welche Zustände ein Hardware- oder Software-Asset in Ihrem Unternehmen durchlaufen kann.</MudText>
-                @foreach (var group in _lifecycleConfig)
-                {
-                    <MudPaper Outlined="true" Class="pa-4 mb-4" Style="background: #fafafa;">
-                        <div class="d-flex align-center justify-space-between mb-2">
-                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">PHASE: @group.Key</MudText>
-                        </div>
-                        <div class="d-flex flex-wrap gap-2">
-                            @foreach (var status in group.Value)
-                            {
-                                <MudChip T="string" OnClose="@(() => RemoveStatus(group.Key, status))" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">@status</MudChip>
-                            }
-                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => AddStatus(group.Key))" />
-                        </div>
-                    </MudPaper>
-                }
-            }
-            else if (_activeSection == "AssetTypes")
-            {
-                <div class="pdq-section-header">Asset Kategorien & Symbole</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Verwalten Sie hier die Typen/Kategorien für Ihre Assets und weisen Sie passende Symbole zu.</MudText>
-                
-                <MudTable T="AssetType" Items="@_dynamicAssetTypes" Dense="true" Bordered="true" Elevation="0" Class="mb-4" Hover="true" CanCancelEdit="true" CommitEditTooltip="Speichern" CancelEditTooltip="Abbrechen" RowEditCommit="SaveAssetType">
-                    <HeaderContent>
-                        <MudTh>Kategorie-Name</MudTh>
-                        <MudTh>Beschreibung (Optional)</MudTh>
-                        <MudTh>Symbol (Icon)</MudTh>
-                        <MudTh Style="width: 50px;"></MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Kategorie-Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Beschreibung">@context.Description</MudTd>
-                        <MudTd DataLabel="Symbol (Icon)">
-                            <div class="d-flex align-center">
-                                <MudIcon Icon="@GetDynamicIcon(context.IconKey)" Size="Size.Small" Class="mr-2" Color="Color.Primary" />
-                                @context.IconKey
-                            </div>
-                        </MudTd>
-                        <MudTd Style="text-align: right;">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteAssetTypeAsync(context))" />
-                        </MudTd>
-                    </RowTemplate>
-                    <RowEditingTemplate>
-                        <MudTd DataLabel="Kategorie-Name">
-                            <MudTextField @bind-Value="context.Name" Required="true" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                        </MudTd>
-                        <MudTd DataLabel="Beschreibung">
-                            <MudTextField @bind-Value="context.Description" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                        </MudTd>
-                        <MudTd DataLabel="Symbol (Icon)">
-                            <MudSelect T="string" @bind-Value="context.IconKey" Margin="Margin.Dense" Variant="Variant.Outlined">
-                                @foreach(var icon in _availableIcons) {
-                                    <MudSelectItem Value="@icon">
-                                        <div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(icon)" Size="Size.Small" Class="mr-2" Color="Color.Primary"/> @icon</div>
-                                    </MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudTd>
-                        <MudTd></MudTd>
-                    </RowEditingTemplate>
-                </MudTable>
-                
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAssetType">Neue Kategorie hinzufügen</MudButton>
             }
             else if (_activeSection == "TagSchema")
             {
@@ -303,6 +371,25 @@
                 </MudDataGrid>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Add(new TicketPriorityItem{Name="NEU", Color="#333333", Icon="Flag"}))">Neue Priorität hinzufügen</MudButton>
             }
+            else if (_activeSection == "Lifecycle")
+            {
+                <div class="pdq-section-header">Asset-Lebenszyklus Phasen & Status</div>
+                @foreach (var group in _lifecycleConfig)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mb-4" Style="background: #fafafa;">
+                        <div class="d-flex align-center justify-space-between mb-2">
+                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">PHASE: @group.Key</MudText>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var status in group.Value)
+                            {
+                                <MudChip T="string" OnClose="@(() => RemoveStatus(group.Key, status))" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">@status</MudChip>
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => AddStatus(group.Key))" />
+                        </div>
+                    </MudPaper>
+                }
+            }
             else if (_activeSection == "Design")
             {
                 <div class="pdq-section-header">Oberfläche & Themes</div>
@@ -353,14 +440,37 @@
     private List<string> _timeZones = new();
     private Dictionary<string, List<string>> _lifecycleConfig = new();
     
+    // Listen
     private List<AssetType> _dynamicAssetTypes = new();
+    private List<Location> _locations = new();
+    private List<Person> _persons = new();
+    private List<Team> _teams = new();
+    
+    // Master-Detail Edit State
+    private Guid? _editCategoryId;
+    private AssetType? _editCategory;
+    private Guid? _editLocationId;
+    private Location? _editLocation;
+    private string? _editOrgId;
+    private Team? _editTeam;
+    private Person? _editPerson;
+
     private List<string> _availableIcons = new() { 
-        "Computer", "Laptop", "LaptopMac", "LaptopWindows", "Tablet", "Smartphone", 
-        "Storage", "Dns", "Router", "Print", "Keyboard", "Mouse", "Headset", 
-        "Security", "Memory", "Save", "Cloud", "VideoCameraFront", "DeviceHub", "Cable", "VpnKey", "Folder" 
+        "Computer", "Laptop", "Tablet", "Smartphone", "Storage", "Dns", "Router", "Print", "Keyboard", "Mouse", "Headset", 
+        "Security", "Memory", "Cloud", "VideoCameraFront", "DeviceHub", "Cable", "Folder",
+        "Wifi", "Phone", "Radio", "BatteryChargingFull", "Power", "AcUnit", "Videocam", "Web", "AccountBalance", "Fingerprint", "IntegrationInstructions", "Business", "People", "Person", "LocationCity", "SettingsEthernet"
     };
 
     private string _tempPrimaryColor = "#004a99";
+    
+    // --- CACHES FÜR MASSIVE PERFORMANCE STEIGERUNG ---
+    private Dictionary<Guid, string> _locationPathCache = new();
+    private Dictionary<Guid, string> _categoryPathCache = new();
+    private ILookup<Guid?, Location> _locationsByParent = Array.Empty<Location>().ToLookup(x => x.ParentLocationId);
+    private ILookup<Guid?, AssetType> _categoriesByParent = Array.Empty<AssetType>().ToLookup(x => x.ParentAssetTypeId);
+    private ILookup<Guid?, Person> _personsByTeam = Array.Empty<Person>().ToLookup(x => x.TeamId);
+    private static readonly Dictionary<string, string> _iconCache = new();
+
     private string _currentVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
     private bool _isChecking = false;
     private bool _updateChecked = false;
@@ -372,102 +482,145 @@
         _isLoading = true;
         try
         {
-            _masterData = await Http.GetFromJsonAsync<MasterDataDto>("api/settings/masterdata") ?? new();
-            try { _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle") ?? new(); } catch { _lifecycleConfig = new(); }
-            try { _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new(); } catch { _timeZones = new List<string> { "W. Europe Standard Time" }; }
-            try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
+            var taskMaster = SafeGetAsync("api/settings/masterdata", new MasterDataDto());
+            var taskLife = SafeGetAsync("api/settings/dynamic/asset-lifecycle", new Dictionary<string, List<string>>());
+            var taskTime = SafeGetAsync("api/settings/timezones", new List<string> { "W. Europe Standard Time" });
+            var taskTypes = SafeGetAsync("api/assets/types", new List<AssetType>());
+            var taskLocs = SafeGetAsync("api/locations", new List<Location>());
+            var taskPers = SafeGetAsync("api/persons", new List<Person>());
+            var taskTeams = SafeGetAsync("api/teams", new List<Team>());
+
+            await Task.WhenAll(taskMaster, taskLife, taskTime, taskTypes, taskLocs, taskPers, taskTeams);
+
+            _masterData = await taskMaster;
+            _lifecycleConfig = await taskLife;
+            _timeZones = await taskTime;
+            _dynamicAssetTypes = await taskTypes;
+            _locations = await taskLocs;
+            _persons = await taskPers;
+            _teams = await taskTeams;
 
             _masterData.TicketStatusList ??= new();
             _masterData.TicketPriorityList ??= new();
             _tempPrimaryColor = ThemeService.Config.PrimaryColor;
             
+            UpdateCaches();
             _ = CheckForUpdates();
         }
         catch { Snackbar.Add("Ladefehler.", Severity.Error); }
         finally { _isLoading = false; }
     }
-
-    private void OnFieldChanged() => StateHasChanged();
-
-    private async Task SaveSettings()
+    
+    private async Task<T> SafeGetAsync<T>(string url, T defaultVal)
     {
-        _isSaving = true;
-        try
+        try {
+            var res = await Http.GetFromJsonAsync<T>(url);
+            return res != null ? res : defaultVal;
+        } catch {
+            return defaultVal;
+        }
+    }
+
+    // --- REKURSIVE BAUM RENDERER ---
+    private RenderFragment RenderCategoryTreeNodes(IEnumerable<AssetType> nodes) => __builder =>
+    {
+        foreach (var node in nodes) {
+            var children = _categoriesByParent[node.Id].OrderBy(t => t.Name).ToList();
+            <MudTreeViewItem T="Guid?" Value="@(new Guid?(node.Id))" Text="@node.Name" Expanded="true" Icon="@GetDynamicIcon(node.IconKey)">
+                @if (children.Any()) { @RenderCategoryTreeNodes(children) }
+            </MudTreeViewItem>
+        }
+    };
+
+    private RenderFragment RenderLocationTreeNodes(IEnumerable<Location> nodes) => __builder =>
+    {
+        foreach (var node in nodes) {
+            var children = _locationsByParent[node.Id].OrderBy(l => l.Name).ToList();
+            <MudTreeViewItem T="Guid?" Value="@(new Guid?(node.Id))" Text="@node.Name" Expanded="true" Icon="@(children.Any() ? Icons.Material.Filled.Folder : Icons.Material.Filled.LocationOn)">
+                @if (children.Any()) { @RenderLocationTreeNodes(children) }
+            </MudTreeViewItem>
+        }
+    };
+
+    // --- SELECTION HANDLER ---
+    private void OnCategorySelected(Guid? id) {
+        _editCategoryId = id;
+        if (id.HasValue) _editCategory = _dynamicAssetTypes.FirstOrDefault(t => t.Id == id.Value);
+        else _editCategory = null;
+        StateHasChanged();
+    }
+    
+    private void OnLocationSelected(Guid? id) {
+        _editLocationId = id;
+        if (id.HasValue) _editLocation = _locations.FirstOrDefault(l => l.Id == id.Value);
+        else _editLocation = null;
+        StateHasChanged();
+    }
+
+    private void OnOrgSelected(string? val) {
+        _editOrgId = val;
+        _editTeam = null; _editPerson = null;
+        if (string.IsNullOrEmpty(val)) return;
+        if (val.StartsWith("TEAM_")) _editTeam = _teams.FirstOrDefault(t => t.Id.ToString() == val.Substring(5));
+        if (val.StartsWith("PERS_")) _editPerson = _persons.FirstOrDefault(p => p.Id.ToString() == val.Substring(5));
+        StateHasChanged();
+    }
+
+    // --- PFAD HELPER ---
+    private string GetLocationPath(Guid? locationId) {
+        if (locationId.HasValue && _locationPathCache.TryGetValue(locationId.Value, out var path)) return path;
+        return "---";
+    }
+
+    private string GetCategoryPath(Guid? typeId) {
+        if (typeId.HasValue && _categoryPathCache.TryGetValue(typeId.Value, out var path)) return path;
+        return "---";
+    }
+    
+    private void UpdateCaches()
+    {
+        _locationsByParent = _locations.ToLookup(l => l.ParentLocationId);
+        _categoriesByParent = _dynamicAssetTypes.ToLookup(t => t.ParentAssetTypeId);
+        _personsByTeam = _persons.ToLookup(p => p.TeamId);
+
+        _locationPathCache.Clear();
+        var locDict = _locations.ToDictionary(l => l.Id);
+        foreach (var loc in _locations)
         {
-            if (_activeSection == "Lifecycle")
-                await Http.PostAsJsonAsync("api/settings/dynamic/asset-lifecycle", _lifecycleConfig);
-            else
-                await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
-            
-            Snackbar.Add("Erfolgreich gespeichert.", Severity.Success);
-        }
-        catch { Snackbar.Add("Speicherfehler.", Severity.Error); }
-        finally { _isSaving = false; }
-    }
-
-    private void SaveAssetType(object element)
-    {
-        _ = SaveAssetTypeAsync(element);
-    }
-
-    private async Task SaveAssetTypeAsync(object element) {
-        if (element is AssetType item) {
-            try {
-                if (item.Id == Guid.Empty) {
-                    var res = await Http.PostAsJsonAsync("api/assets/types", item);
-                    if (res.IsSuccessStatusCode) {
-                        var created = await res.Content.ReadFromJsonAsync<AssetType>();
-                        if (created != null) item.Id = created.Id;
-                        Snackbar.Add($"Kategorie '{item.Name}' erstellt.", Severity.Success);
-                    }
-                } else {
-                    await Http.PutAsJsonAsync($"api/assets/types/{item.Id}", item);
-                    Snackbar.Add($"Kategorie '{item.Name}' aktualisiert.", Severity.Success);
-                }
-            } catch { Snackbar.Add("Fehler.", Severity.Error); }
-        }
-    }
-
-    private async Task DeleteAssetTypeAsync(AssetType item) {
-        if (item.Id == Guid.Empty) { _dynamicAssetTypes.Remove(item); return; }
-        try {
-            var res = await Http.DeleteAsync($"api/assets/types/{item.Id}");
-            if (res.IsSuccessStatusCode) { _dynamicAssetTypes.Remove(item); Snackbar.Add("Gelöscht.", Severity.Success); }
-            else { Snackbar.Add("Kategorie wird noch verwendet.", Severity.Warning); }
-        } catch { }
-    }
-
-    private void AddAssetType() => _dynamicAssetTypes.Insert(0, new AssetType { Name = "Neu", IconKey = "Computer" });
-
-    private async Task CheckForUpdates()
-    {
-        if (_isChecking) return;
-        _isChecking = true; _updateChecked = false;
-        await InvokeAsync(StateHasChanged);
-        try {
-            var release = await UpdateService.GetLatestReleaseAsync();
-            if (release != null) {
-                _latestVersion = release.TagName;
-                _updateFound = _latestVersion.TrimStart('v','V') != _currentVersion;
-                _updateChecked = true;
+            var path = loc.Name;
+            var parentId = loc.ParentLocationId;
+            int depth = 0;
+            while (parentId.HasValue && depth < 10)
+            {
+                if (locDict.TryGetValue(parentId.Value, out var parent)) {
+                    path = parent.Name + " > " + path;
+                    parentId = parent.ParentLocationId;
+                    depth++;
+                } else break;
             }
-        } catch { _updateChecked = false; }
-        finally { _isChecking = false; await InvokeAsync(StateHasChanged); }
+            _locationPathCache[loc.Id] = path;
+        }
+
+        _categoryPathCache.Clear();
+        var catDict = _dynamicAssetTypes.ToDictionary(t => t.Id);
+        foreach (var cat in _dynamicAssetTypes)
+        {
+            var path = cat.Name;
+            var parentId = cat.ParentAssetTypeId;
+            int depth = 0;
+            while (parentId.HasValue && depth < 10)
+            {
+                if (catDict.TryGetValue(parentId.Value, out var parent)) {
+                    path = parent.Name + " > " + path;
+                    parentId = parent.ParentAssetTypeId;
+                    depth++;
+                } else break;
+            }
+            _categoryPathCache[cat.Id] = path;
+        }
     }
 
-    private void OnDarkModeChanged(bool isDark) { var cfg = ThemeService.Config; cfg.IsDark = isDark; ThemeService.UpdateConfig(cfg); }
-    private void ApplyColor() { var cfg = ThemeService.Config; cfg.PrimaryColor = _tempPrimaryColor; ThemeService.UpdateConfig(cfg); }
-    private void RemoveStatus(string g, string s) { if (_lifecycleConfig.ContainsKey(g)) { _lifecycleConfig[g].Remove(s); OnFieldChanged(); } }
-    private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new(); _lifecycleConfig[g].Add("NEU"); OnFieldChanged(); }
-
-    private string GetDynamicIcon(string? iconName) {
-        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Computer;
-        try {
-            var field = typeof(Icons.Material.Filled).GetField(iconName ?? "");
-            return field?.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
-        } catch { return Icons.Material.Filled.Computer; }
-    }
-
+    // --- ETIKETTEN VORSCHAU ---
     private string GetTagPreview() => (_masterData.AssetTagPattern ?? "{COMP}-{LOC}-{CAT}-{NUM:5}")
         .Replace("{COMP}", _masterData.CompanyPrefix ?? "GIT").Replace("{LOC}", "FRA").Replace("{CAT}", "SRV").Replace("{NUM:5}", "00001");
 
@@ -494,10 +647,222 @@
         await JSRuntime.InvokeVoidAsync("eval", "var w = window.open(); w.document.write(atob('" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html)) + "')); w.document.close();");
     }
 
+    // --- CRUD ---
+    private void AddAssetType() {
+        _editCategory = new AssetType { Name = "Neue Kategorie", IconKey = "Folder" };
+        _editCategoryId = Guid.Empty;
+    }
+    private async Task SaveCategory() {
+        if (_editCategory == null) return;
+        try {
+            if (_editCategory.Id == Guid.Empty) {
+                var res = await Http.PostAsJsonAsync("api/assets/types", _editCategory);
+                if (res.IsSuccessStatusCode) {
+                    var created = await res.Content.ReadFromJsonAsync<AssetType>();
+                    if (created != null) { 
+                        _dynamicAssetTypes.Add(created); 
+                        _editCategoryId = created.Id; 
+                        _editCategory = created; 
+                        UpdateCaches(); 
+                    }
+                    Snackbar.Add("Kategorie erstellt.", Severity.Success);
+                }
+            } else {
+                await Http.PutAsJsonAsync($"api/assets/types/{_editCategory.Id}", _editCategory);
+                UpdateCaches();
+                Snackbar.Add("Kategorie aktualisiert.", Severity.Success);
+            }
+        } catch { Snackbar.Add("Fehler.", Severity.Error); }
+    }
+    private async Task DeleteCategory() {
+        if (_editCategory == null) return;
+        if (_editCategory.Id == Guid.Empty) { _editCategory = null; _editCategoryId = null; return; }
+        try {
+            var res = await Http.DeleteAsync($"api/assets/types/{_editCategory.Id}");
+            if (res.IsSuccessStatusCode) { 
+                _dynamicAssetTypes.Remove(_editCategory); 
+                _editCategory = null; 
+                _editCategoryId = null; 
+                UpdateCaches(); 
+                Snackbar.Add("Gelöscht.", Severity.Success); 
+            }
+            else { Snackbar.Add("Kategorie wird noch verwendet.", Severity.Warning); }
+        } catch { }
+    }
+
+    private void AddLocation() {
+        _editLocation = new Location { Name = "Neuer Standort" };
+        _editLocationId = Guid.Empty;
+    }
+    private async Task SaveLocation() {
+        if (_editLocation == null) return;
+        try {
+            if (_editLocation.Id == Guid.Empty) {
+                var res = await Http.PostAsJsonAsync("api/locations", _editLocation);
+                if (res.IsSuccessStatusCode) {
+                    var created = await res.Content.ReadFromJsonAsync<Location>();
+                    if (created != null) { 
+                        _locations.Add(created); 
+                        _editLocationId = created.Id; 
+                        _editLocation = created; 
+                        UpdateCaches(); 
+                    }
+                    Snackbar.Add("Standort erstellt.", Severity.Success);
+                }
+            } else {
+                await Http.PutAsJsonAsync($"api/locations/{_editLocation.Id}", _editLocation);
+                UpdateCaches();
+                Snackbar.Add("Standort aktualisiert.", Severity.Success);
+            }
+        } catch { Snackbar.Add("Fehler.", Severity.Error); }
+    }
+    private async Task DeleteLocation() {
+        if (_editLocation == null) return;
+        if (_editLocation.Id == Guid.Empty) { _editLocation = null; _editLocationId = null; return; }
+        try {
+            var res = await Http.DeleteAsync($"api/locations/{_editLocation.Id}");
+            if (res.IsSuccessStatusCode) { 
+                _locations.Remove(_editLocation); 
+                _editLocation = null; 
+                _editLocationId = null; 
+                UpdateCaches(); 
+                Snackbar.Add("Gelöscht.", Severity.Success); 
+            }
+            else { Snackbar.Add("Standort wird noch verwendet.", Severity.Warning); }
+        } catch { }
+    }
+
+    private void AddTeam() {
+        _editTeam = new Team { Name = "Neues Team" };
+        _editOrgId = "TEAM_NEW";
+    }
+    private async Task SaveTeam() {
+        if (_editTeam == null) return;
+        try {
+            if (_editTeam.Id == Guid.Empty) {
+                var res = await Http.PostAsJsonAsync("api/teams", _editTeam);
+                if (res.IsSuccessStatusCode) {
+                    var created = await res.Content.ReadFromJsonAsync<Team>();
+                    if (created != null) { 
+                        _teams.Add(created); 
+                        _editTeam = created; 
+                        _editOrgId = $"TEAM_{created.Id}"; 
+                        UpdateCaches(); 
+                    }
+                    Snackbar.Add("Team erstellt.", Severity.Success);
+                }
+            } else {
+                await Http.PutAsJsonAsync($"api/teams/{_editTeam.Id}", _editTeam);
+                UpdateCaches();
+                Snackbar.Add("Team aktualisiert.", Severity.Success);
+            }
+        } catch { }
+    }
+    private async Task DeleteTeam() {
+        if (_editTeam == null || _editTeam.Id == Guid.Empty) { _editTeam = null; return; }
+        try {
+            var res = await Http.DeleteAsync($"api/teams/{_editTeam.Id}");
+            if (res.IsSuccessStatusCode) { 
+                _teams.Remove(_editTeam); 
+                _editTeam = null; 
+                _editOrgId = null; 
+                UpdateCaches(); 
+                Snackbar.Add("Gelöscht.", Severity.Success); 
+            }
+            else { Snackbar.Add("Team wird noch verwendet.", Severity.Warning); }
+        } catch { }
+    }
+
+    private void AddPerson() {
+        _editPerson = new Person { FirstName = "Vorname", LastName = "Nachname", SystemRole = "Reader" };
+        _editOrgId = "PERS_NEW";
+    }
+    private async Task SavePerson() {
+        if (_editPerson == null) return;
+        try {
+            if (_editPerson.Id == Guid.Empty) {
+                var res = await Http.PostAsJsonAsync("api/persons", _editPerson);
+                if (res.IsSuccessStatusCode) {
+                    var created = await res.Content.ReadFromJsonAsync<Person>();
+                    if (created != null) { 
+                        _persons.Add(created); 
+                        _editPerson = created; 
+                        _editOrgId = $"PERS_{created.Id}"; 
+                        UpdateCaches(); 
+                    }
+                    Snackbar.Add("Person erstellt.", Severity.Success);
+                }
+            } else {
+                await Http.PutAsJsonAsync($"api/persons/{_editPerson.Id}", _editPerson);
+                UpdateCaches();
+                Snackbar.Add("Person aktualisiert.", Severity.Success);
+            }
+        } catch { }
+    }
+    private async Task DeletePerson() {
+        if (_editPerson == null || _editPerson.Id == Guid.Empty) { _editPerson = null; return; }
+        try {
+            var res = await Http.DeleteAsync($"api/persons/{_editPerson.Id}");
+            if (res.IsSuccessStatusCode) { 
+                _persons.Remove(_editPerson); 
+                _editPerson = null; 
+                _editOrgId = null; 
+                UpdateCaches(); 
+                Snackbar.Add("Gelöscht.", Severity.Success); 
+            }
+            else { Snackbar.Add("In Benutzung.", Severity.Warning); }
+        } catch { }
+    }
+
+    private async Task SaveSettings() {
+        _isSaving = true;
+        try {
+            if (_activeSection == "Lifecycle") await Http.PostAsJsonAsync("api/settings/dynamic/asset-lifecycle", _lifecycleConfig);
+            else await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
+            Snackbar.Add("Erfolgreich gespeichert.", Severity.Success);
+        } catch { } finally { _isSaving = false; }
+    }
+
+    private async Task CheckForUpdates()
+    {
+        if (_isChecking) return;
+        _isChecking = true; _updateChecked = false;
+        await InvokeAsync(StateHasChanged);
+        try {
+            var release = await UpdateService.GetLatestReleaseAsync();
+            if (release != null) {
+                _latestVersion = release.TagName;
+                _updateFound = _latestVersion.TrimStart('v','V') != _currentVersion;
+                _updateChecked = true;
+            }
+        } catch { _updateChecked = false; }
+        finally { _isChecking = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private void OnDarkModeChanged(bool isDark) { var cfg = ThemeService.Config; cfg.IsDark = isDark; ThemeService.UpdateConfig(cfg); }
+    private void ApplyColor() { var cfg = ThemeService.Config; cfg.PrimaryColor = _tempPrimaryColor; ThemeService.UpdateConfig(cfg); }
+    private void RemoveStatus(string g, string s) { if (_lifecycleConfig.ContainsKey(g)) { _lifecycleConfig[g].Remove(s); StateHasChanged(); } }
+    private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new(); _lifecycleConfig[g].Add("NEU"); StateHasChanged(); }
+
+    private void OnFieldChanged() => StateHasChanged();
+
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Folder;
+        if (_iconCache.TryGetValue(iconName, out var cachedIcon)) return cachedIcon;
+        
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            var icon = field?.GetValue(null)?.ToString() ?? Icons.Material.Filled.Folder;
+            _iconCache[iconName] = icon;
+            return icon;
+        } catch { return Icons.Material.Filled.Folder; }
+    }
+
     public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
     public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
     public class MasterDataDto {
+        public string TenantName { get; set; } = "";
         public string CompanyName { get; set; } = "";
         public string CompanyPrefix { get; set; } = "";
         public string Domain { get; set; } = "";

@@ -5,6 +5,8 @@
 @using MudBlazor
 @using System.Text
 @using System.Text.Json
+@using System.Threading.Tasks
+@using System.Linq
 @using InfraDesk.UI.Web.Services
 @inject HttpClient Http
 @inject ThemeService ThemeService
@@ -16,7 +18,7 @@
 
 <style>
     .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; }
-    .pdq-sidebar { width: 300px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; padding-bottom: 20px; }
+    .pdq-sidebar { width: 340px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; padding-bottom: 20px; }
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 20px; }
     .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
     
@@ -47,7 +49,7 @@
         
         <div class="sidebar-section">
             <div class="sidebar-header">Status</div>
-            <MudSelect T="string" @bind-Value="_filterStatus" Clearable="true" Placeholder="Alle Status" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+            <MudSelect T="string" Value="@_filterStatus" ValueChanged="OnStatusFilterChanged" Clearable="true" Placeholder="Alle Status" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
                 @foreach (var status in _lifecycleStatuses)
                 {
                     <MudSelectItem Value="@status">@status</MudSelectItem>
@@ -56,21 +58,51 @@
         </div>
 
         <div class="sidebar-section">
-            <div class="sidebar-header">Kategorie</div>
-            <MudSelect T="Guid?" @bind-Value="_filterTypeId" Clearable="true" Placeholder="Alle Kategorien" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
-                @foreach (var t in _assetTypes) {
-                    <MudSelectItem T="Guid?" Value="@t.Id">
-                        <div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(t.IconKey)" Size="Size.Small" Class="mr-2"/> @t.Name</div>
-                    </MudSelectItem>
+            <div class="d-flex justify-space-between align-center mb-2">
+                <div class="sidebar-header mb-0">CMDB Kategorien</div>
+                @if (_filterTypeId.HasValue) {
+                    <MudTooltip Text="Filter zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.Clear" Size="Size.Small" Color="Color.Error" OnClick="@(() => OnCategorySelected(null))" Style="padding: 2px; margin-top: -4px;" />
+                    </MudTooltip>
                 }
-            </MudSelect>
+            </div>
+            
+            <div style="background: white; border: 1px solid #ccc; border-radius: 4px; max-height: 350px; overflow-y: auto; padding: 4px;">
+                @if (_assetTypes.Any())
+                {
+                    <MudTreeView T="Guid?" SelectedValue="@_filterTypeId" SelectedValueChanged="OnCategorySelected" Hover="true" Dense="true" Color="Color.Primary">
+                        @RenderCategoryTree(_assetTypes.Where(t => t.ParentAssetTypeId == null).OrderBy(t => t.Name))
+                    </MudTreeView>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pa-2 d-block text-center">Keine Kategorien gefunden</MudText>
+                }
+            </div>
         </div>
 
         <div class="sidebar-section">
-            <div class="sidebar-header">Standort</div>
-            <MudSelect T="Guid?" @bind-Value="_filterLocationId" Clearable="true" Placeholder="Alle Standorte" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
-                @foreach (var l in _locations) { <MudSelectItem T="Guid?" Value="@l.Id">@l.Name</MudSelectItem> }
-            </MudSelect>
+            <div class="d-flex justify-space-between align-center mb-2">
+                <div class="sidebar-header mb-0">Standort & Geografie</div>
+                @if (_filterLocationId.HasValue) {
+                    <MudTooltip Text="Filter zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.Clear" Size="Size.Small" Color="Color.Error" OnClick="@(() => OnLocationSelected(null))" Style="padding: 2px; margin-top: -4px;" />
+                    </MudTooltip>
+                }
+            </div>
+            
+            <div style="background: white; border: 1px solid #ccc; border-radius: 4px; max-height: 350px; overflow-y: auto; padding: 4px;">
+                @if (_locations.Any())
+                {
+                    <MudTreeView T="Guid?" SelectedValue="@_filterLocationId" SelectedValueChanged="OnLocationSelected" Hover="true" Dense="true" Color="Color.Primary">
+                        @RenderLocationTree(_locations.Where(l => l.ParentLocationId == null).OrderBy(l => l.Name))
+                    </MudTreeView>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pa-2 d-block text-center">Keine Standorte gefunden</MudText>
+                }
+            </div>
         </div>
     </div>
 
@@ -78,12 +110,12 @@
         @if (_isLoading) {
             <div class="d-flex justify-center align-center h-100"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
         } else {
-            <MudDataGrid T="Asset" Items="@FilteredAssets" Hover="true" Dense="true" Bordered="true" Elevation="0" MultiSelection="true" @bind-SelectedItems="_selectedItems" RowClick="@OnRowClicked">
+            <MudDataGrid T="Asset" Items="@_filteredAssets" Hover="true" Dense="true" Bordered="true" Elevation="0" MultiSelection="true" @bind-SelectedItems="_selectedItems" RowClick="@OnRowClicked">
                 <ToolBarContent>
-                    <MudText Typo="Typo.h6">Gefundene Assets (@FilteredAssets.Count())</MudText>
+                    <MudText Typo="Typo.h6">Gefundene Assets (@_filteredAssets.Count)</MudText>
                     <MudSpacer />
                     
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche (Tag, Name, SN)..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mr-4 mt-0" Style="max-width:300px;" Immediate="true" />
+                    <MudTextField T="string" Value="@_searchString" ValueChanged="OnSearchChanged" Immediate="true" Placeholder="Suche (Tag, Name, SN)..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mr-4 mt-0" Style="max-width:300px;" />
                     
                     <MudTooltip Text="Spalten anpassen">
                         <MudMenu Icon="@Icons.Material.Filled.ViewColumn" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" AutoClose="false" Class="mr-2">
@@ -153,7 +185,7 @@
                                 <CellTemplate>
                                     @if(context.Item.AssetType != null) {
                                         <div class="d-flex align-center">
-                                            @context.Item.AssetType.Name
+                                            @GetCategoryPath(context.Item.AssetTypeId)
                                         </div>
                                     }
                                 </CellTemplate>
@@ -173,12 +205,16 @@
                         }
                         else if (col.Id == "Location" && col.Visible)
                         {
-                            <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : "")" Title="Standort" />
+                            <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : "")" Title="Standort">
+                                <CellTemplate>
+                                    @(GetLocationPath(context.Item.LocationId))
+                                </CellTemplate>
+                            </PropertyColumn>
                         }
                     }
                 </Columns>
                 <PagerContent>
-                    <MudDataGridPager T="Asset" PageSizeOptions="@(new int[] { 50, 100, 250, 500 })" />
+                    <MudDataGridPager T="Asset" PageSizeOptions="@(new int[] { 50, 100, 250, 500, 1000 })" />
                 </PagerContent>
             </MudDataGrid>
         }
@@ -187,6 +223,7 @@
 
 @code {
     private List<Asset> _assets = new();
+    private List<Asset> _filteredAssets = new();
     private List<AssetType> _assetTypes = new();
     private List<Location> _locations = new();
     
@@ -198,6 +235,15 @@
     
     private HashSet<Asset> _selectedItems = new();
     private List<string> _lifecycleStatuses = new() { "Produktiv", "Auf Lager", "Ausgemustert" };
+
+    // --- CACHES FÜR MASSIVE PERFORMANCE STEIGERUNG ---
+    private Dictionary<Guid, string> _locationPathCache = new();
+    private Dictionary<Guid, string> _categoryPathCache = new();
+    private Dictionary<Guid, AssetType> _typeDict = new();
+    private Dictionary<Guid, Location> _locDict = new();
+    private ILookup<Guid?, Location> _locationsByParent = Array.Empty<Location>().ToLookup(x => x.ParentLocationId);
+    private ILookup<Guid?, AssetType> _categoriesByParent = Array.Empty<AssetType>().ToLookup(x => x.ParentAssetTypeId);
+    private static readonly Dictionary<string, string> _iconCache = new();
 
     public class ColumnDef { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public bool Visible { get; set; } = true; public int Order { get; set; } }
     
@@ -216,19 +262,194 @@
     protected override async Task OnInitializedAsync() {
         _isLoading = true;
         try {
-            // Lade die dynamischen Status-Werte aus den Einstellungen (Niemals Hardcoden, wie gewünscht!)
-            try {
-                var lifecycleDict = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle");
-                if (lifecycleDict != null && lifecycleDict.Any()) {
-                    _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
-                }
-            } catch { }
+            var taskLife = SafeGetAsync("api/settings/dynamic/asset-lifecycle", new Dictionary<string, List<string>>());
+            var taskTypes = SafeGetAsync("api/assets/types", new List<AssetType>());
+            var taskLocs = SafeGetAsync("api/locations", new List<Location>());
+            var taskAssets = SafeGetAsync("api/assets", new List<Asset>());
 
-            _assetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new();
-            _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new();
-            _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new();
+            await Task.WhenAll(taskLife, taskTypes, taskLocs, taskAssets);
+
+            var lifecycleDict = await taskLife;
+            if (lifecycleDict != null && lifecycleDict.Any()) {
+                _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
+            }
+
+            _assetTypes = await taskTypes;
+            _locations = await taskLocs;
+            _assets = await taskAssets;
+
+            UpdateCaches();
+            ApplyFilter(); // Initiales Setzen der Liste
         } catch { Snackbar.Add("Fehler beim Laden der Assets.", Severity.Error); }
         finally { _isLoading = false; }
+    }
+
+    private async Task<T> SafeGetAsync<T>(string url, T defaultVal)
+    {
+        try {
+            var res = await Http.GetFromJsonAsync<T>(url);
+            return res != null ? res : defaultVal;
+        } catch {
+            return defaultVal;
+        }
+    }
+
+    private void UpdateCaches()
+    {
+        _locationsByParent = _locations.ToLookup(l => l.ParentLocationId);
+        _categoriesByParent = _assetTypes.ToLookup(t => t.ParentAssetTypeId);
+        _typeDict = _assetTypes.ToDictionary(t => t.Id);
+        _locDict = _locations.ToDictionary(l => l.Id);
+
+        _locationPathCache.Clear();
+        foreach (var loc in _locations)
+        {
+            var path = loc.Name;
+            var parentId = loc.ParentLocationId;
+            int depth = 0;
+            while (parentId.HasValue && depth < 10)
+            {
+                if (_locDict.TryGetValue(parentId.Value, out var parent)) {
+                    path = parent.Name + " > " + path;
+                    parentId = parent.ParentLocationId;
+                    depth++;
+                } else break;
+            }
+            _locationPathCache[loc.Id] = path;
+        }
+
+        _categoryPathCache.Clear();
+        foreach (var cat in _assetTypes)
+        {
+            var path = cat.Name;
+            var parentId = cat.ParentAssetTypeId;
+            int depth = 0;
+            while (parentId.HasValue && depth < 10)
+            {
+                if (_typeDict.TryGetValue(parentId.Value, out var parent)) {
+                    path = parent.Name + " > " + path;
+                    parentId = parent.ParentAssetTypeId;
+                    depth++;
+                } else break;
+            }
+            _categoryPathCache[cat.Id] = path;
+        }
+    }
+
+    // --- FILTER & EVENT HANDLER (Entkoppelt vom permanenten Render-Loop!) ---
+    private void OnStatusFilterChanged(string? status)
+    {
+        _filterStatus = status;
+        ApplyFilter();
+    }
+
+    private void OnSearchChanged(string text)
+    {
+        _searchString = text;
+        ApplyFilter();
+    }
+
+    private void OnCategorySelected(Guid? selectedId) 
+    { 
+        _filterTypeId = selectedId; 
+        ApplyFilter();
+    }
+
+    private void OnLocationSelected(Guid? selectedId) 
+    { 
+        _filterLocationId = selectedId; 
+        ApplyFilter();
+    }
+
+    private HashSet<Guid> GetValidTypeIds(Guid rootId)
+    {
+        var result = new HashSet<Guid>();
+        var stack = new Stack<Guid>();
+        stack.Push(rootId);
+        
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            result.Add(current);
+            foreach (var child in _categoriesByParent[current])
+            {
+                stack.Push(child.Id);
+            }
+        }
+        return result;
+    }
+
+    private HashSet<Guid> GetValidLocationIds(Guid rootId)
+    {
+        var result = new HashSet<Guid>();
+        var stack = new Stack<Guid>();
+        stack.Push(rootId);
+        
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            result.Add(current);
+            foreach (var child in _locationsByParent[current])
+            {
+                stack.Push(child.Id);
+            }
+        }
+        return result;
+    }
+
+    // Explizite Zuweisung an _filteredAssets (Löst das O(N^2) Hänger-Problem auf UI-Ebene)
+    private void ApplyFilter()
+    {
+        var validTypes = _filterTypeId.HasValue ? GetValidTypeIds(_filterTypeId.Value) : null;
+        var validLocs = _filterLocationId.HasValue ? GetValidLocationIds(_filterLocationId.Value) : null;
+
+        _filteredAssets = _assets.Where(a => 
+            (string.IsNullOrWhiteSpace(_filterStatus) || a.LifecycleStatus == _filterStatus) &&
+            (!_filterTypeId.HasValue || validTypes!.Contains(a.AssetTypeId)) &&
+            (!_filterLocationId.HasValue || validLocs!.Contains(a.LocationId.GetValueOrDefault())) &&
+            (string.IsNullOrWhiteSpace(_searchString) || 
+             (a.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
+             (a.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+             (a.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true))
+        ).ToList();
+    }
+
+    // --- TREE VIEWS ---
+    private RenderFragment RenderCategoryTree(IEnumerable<AssetType> nodes) => __builder =>
+    {
+        foreach (var node in nodes)
+        {
+            var children = _categoriesByParent[node.Id].OrderBy(t => t.Name).ToList();
+            bool isRoot = node.ParentAssetTypeId == null;
+            
+            <MudTreeViewItem T="Guid?" Value="@(new Guid?(node.Id))" Text="@node.Name" Expanded="@isRoot" Icon="@GetDynamicIcon(node.IconKey)">
+                @if (children.Any()) { @RenderCategoryTree(children) }
+            </MudTreeViewItem>
+        }
+    };
+
+    private RenderFragment RenderLocationTree(IEnumerable<Location> nodes) => __builder =>
+    {
+        foreach (var node in nodes)
+        {
+            var children = _locationsByParent[node.Id].OrderBy(l => l.Name).ToList();
+            bool isRoot = node.ParentLocationId == null;
+            
+            <MudTreeViewItem T="Guid?" Value="@(new Guid?(node.Id))" Text="@node.Name" Expanded="@isRoot" Icon="@(children.Any() ? Icons.Material.Filled.Folder : Icons.Material.Filled.LocationOn)">
+                @if (children.Any()) { @RenderLocationTree(children) }
+            </MudTreeViewItem>
+        }
+    };
+
+    // --- PFAD GENERIERUNG (O(1) Dictionary Lookup) ---
+    private string GetCategoryPath(Guid? typeId) {
+        if (typeId.HasValue && _categoryPathCache.TryGetValue(typeId.Value, out var path)) return path;
+        return "---";
+    }
+
+    private string GetLocationPath(Guid? locationId) {
+        if (locationId.HasValue && _locationPathCache.TryGetValue(locationId.Value, out var path)) return path;
+        return "---";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender) {
@@ -238,24 +459,11 @@
         }
     }
 
-    private IEnumerable<Asset> FilteredAssets => _assets.Where(a => 
-        (string.IsNullOrWhiteSpace(_filterStatus) || a.LifecycleStatus == _filterStatus) &&
-        (!_filterTypeId.HasValue || a.AssetTypeId == _filterTypeId.Value) &&
-        (!_filterLocationId.HasValue || a.LocationId == _filterLocationId.Value) &&
-        (string.IsNullOrWhiteSpace(_searchString) || 
-         (a.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
-         (a.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
-         (a.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true))
-    );
-
-    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args) {
-        Nav.NavigateTo($"/assets/{args.Item.Id}");
-    }
-
+    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args) => Nav.NavigateTo($"/assets/{args.Item.Id}");
+    
     private void MoveColUp(ColumnDef col) {
         if (col.Order > 1) { var prev = _columns.First(c => c.Order == col.Order - 1); prev.Order++; col.Order--; StateHasChanged(); }
     }
-
     private void MoveColDown(ColumnDef col) {
         if (col.Order < _columns.Count) { var next = _columns.First(c => c.Order == col.Order + 1); next.Order--; col.Order++; StateHasChanged(); }
     }
@@ -264,9 +472,9 @@
         try {
             var sb = new StringBuilder();
             sb.AppendLine("Status;AssetTag;Name;Kategorie;Hersteller;Zuweisung;Standort;Seriennummer");
-            foreach(var a in FilteredAssets) {
+            foreach(var a in _filteredAssets) {
                 string owner = a.Owner != null ? $"{a.Owner.FirstName} {a.Owner.LastName}" : "";
-                sb.AppendLine($"{a.LifecycleStatus};{a.AssetTag};{a.Name};{a.AssetType?.Name};{a.Manufacturer?.Name};{owner};{a.Location?.Name};{a.SerialNumber}");
+                sb.AppendLine($"{a.LifecycleStatus};{a.AssetTag};{a.Name};{GetCategoryPath(a.AssetTypeId)};{a.Manufacturer?.Name};{owner};{GetLocationPath(a.LocationId)};{a.SerialNumber}");
             }
             var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(sb.ToString()));
             await JSRuntime.InvokeVoidAsync("downloadFileFromBase64", $"InfraDesk_Assets_{DateTime.Now:yyyyMMdd}.csv", "text/csv", base64);
@@ -277,7 +485,6 @@
     private async Task ImportCsv(InputFileChangeEventArgs e) {
         if (e.File == null) return;
         Snackbar.Add("Import-Prozess gestartet...", Severity.Info);
-        // Refresh nach Import
     }
 
     private Color GetStatusColor(string? status) => status switch {
@@ -290,10 +497,13 @@
 
     private string GetDynamicIcon(string? iconName) {
         if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Computer;
+        if (_iconCache.TryGetValue(iconName, out var cachedIcon)) return cachedIcon;
+        
         try {
             var field = typeof(Icons.Material.Filled).GetField(iconName);
-            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
-        } catch {}
-        return Icons.Material.Filled.Computer;
+            var icon = field?.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
+            _iconCache[iconName] = icon;
+            return icon;
+        } catch { return Icons.Material.Filled.Computer; }
     }
 }

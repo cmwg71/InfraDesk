@@ -29,8 +29,6 @@ public class SettingsController : ControllerBase
         return Ok(TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(id => id).ToList());
     }
 
-    // FIX: Fehlender Endpunkt, der den 404-Fehler und Absturz verursacht hat.
-    // WICHTIG: Gibt application/json zurück, damit Blazor es direkt verarbeiten kann.
     [HttpGet("dynamic/{key}")]
     public async Task<IActionResult> GetGenericSetting(string key)
     {
@@ -38,7 +36,6 @@ public class SettingsController : ControllerBase
         return Content(setting?.Value ?? "{}", "application/json");
     }
 
-    // FIX: Endpunkt zum Speichern der dynamischen Listen (Status, Prioritäten, Vorlagen)
     [HttpPost("dynamic/{key}")]
     public async Task<ActionResult> SaveGenericSetting(string key, [FromBody] JsonElement value)
     {
@@ -65,14 +62,19 @@ public class SettingsController : ControllerBase
         {
             try
             {
-                // Versuche, die Settings zu laden.
                 dto = JsonSerializer.Deserialize<MasterDataDto>(setting.Value) ?? new MasterDataDto();
             }
             catch
             {
-                // Fallback: Falls sich die Struktur in der Datenbank geändert hat (z.B. alter String vs. neue List<T>),
-                // fangen wir den Fehler ab und nutzen die Standardwerte aus dem neuen Dto.
+                // Fallback
             }
+        }
+
+        // Lade zusätzlich den echten Namen des Mandanten aus der DB
+        var tenant = await _context.Tenants.FirstOrDefaultAsync();
+        if (tenant != null)
+        {
+            dto.TenantName = tenant.Name;
         }
 
         var admin = await _context.Persons.FirstOrDefaultAsync(p => p.SystemRole == "Global Admin");
@@ -92,6 +94,7 @@ public class SettingsController : ControllerBase
 
         var jsonDto = new MasterDataDto
         {
+            TenantName = dto.TenantName, // Wird hier nur zur Sicherheit mitgespeichert
             CompanyName = dto.CompanyName,
             CompanyPrefix = dto.CompanyPrefix,
             Domain = dto.Domain,
@@ -114,7 +117,7 @@ public class SettingsController : ControllerBase
             PrintResolutionDpi = dto.PrintResolutionDpi,
             TicketDefaultFilter = dto.TicketDefaultFilter,
             TicketShowClosed = dto.TicketShowClosed,
-            TicketStatusList = dto.TicketStatusList, // Nun strukturierte Listen (Name, Farbe, Icon)
+            TicketStatusList = dto.TicketStatusList,
             TicketPriorityList = dto.TicketPriorityList
         };
 
@@ -123,6 +126,13 @@ public class SettingsController : ControllerBase
             _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "MasterData", Value = jsonString });
         else
             setting.Value = jsonString;
+
+        // WICHTIG: Überschreibe den tatsächlichen Mandantennamen in der DB!
+        var tenant = await _context.Tenants.FirstOrDefaultAsync();
+        if (tenant != null && !string.IsNullOrWhiteSpace(dto.TenantName))
+        {
+            tenant.Name = dto.TenantName;
+        }
 
         // Admin-Account aktualisieren
         var admin = await _context.Persons.FirstOrDefaultAsync(p => p.SystemRole == "Global Admin");
@@ -152,7 +162,6 @@ public class SettingsController : ControllerBase
     }
 }
 
-// --- NEUE STRUKTUREN FÜR FARBEN & ICONS ---
 public class TicketStatusItem
 {
     public string Name { get; set; } = "";
@@ -169,6 +178,7 @@ public class TicketPriorityItem
 
 public class MasterDataDto
 {
+    public string TenantName { get; set; } = "";
     public string CompanyName { get; set; } = "";
     public string CompanyPrefix { get; set; } = "";
     public string Domain { get; set; } = "";
@@ -198,7 +208,6 @@ public class MasterDataDto
     public string TicketDefaultFilter { get; set; } = "Alle";
     public bool TicketShowClosed { get; set; } = false;
 
-    // Ersetzt die alten "OFFEN,AKTIV"-Strings durch strukturierte Listen
     public List<TicketStatusItem> TicketStatusList { get; set; } = new()
     {
         new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" },

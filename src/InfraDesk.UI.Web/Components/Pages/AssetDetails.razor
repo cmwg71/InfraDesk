@@ -10,7 +10,6 @@
 @inject ThemeService ThemeService
 
 <style>
-    /* PDQ Inventory Style: High Density Property Grid */
     .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; }
     .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 4px; }
@@ -28,7 +27,7 @@
 } else if (_asset != null) {
     <div class="pdq-toolbar">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" Size="Size.Small" Class="mr-2" />
-        <MudIcon Icon="@GetIcon(_asset.AssetType?.Name)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+        <MudIcon Icon="@GetIcon(_asset.AssetType?.IconKey)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
         <MudText Typo="Typo.body2" Class="font-weight-bold">@_asset.Name (@(_asset.AssetType?.Name))</MudText>
         <MudSpacer />
         <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Class="mr-2">@_asset.LifecycleStatus</MudChip>
@@ -45,19 +44,17 @@
                     <MudNavLink OnClick="@(() => _activeTab = "Hardware")" Class="@(_activeTab == "Hardware" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Memory">Technische Daten</MudNavLink>
                 }
                 @if (IsCategory("Network")) {
-                    <MudNavLink OnClick="@(() => _activeTab = "Network")" Class="@(_activeTab == "Network" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SettingsInputComponent">Port-Belegung</MudNavLink>
+                    <MudNavLink OnClick="@(() => _activeTab = "Network")" Class="@(_activeTab == "Network" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.SettingsInputComponent">Netzwerk & IP</MudNavLink>
                 }
                 
                 @if (!IsCategory("Service") && !IsCategory("License") && !IsCategory("Geo") && !IsCategory("Org")) {
-                    <MudNavLink OnClick="@(() => _activeTab = "Software")" Class="@(_activeTab == "Software" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Code">Software & IP-Stack</MudNavLink>
-                    <MudNavLink OnClick="@(() => _activeTab = "AD")" Class="@(_activeTab == "AD" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.VerifiedUser">Identität / AD</MudNavLink>
+                    <MudNavLink OnClick="@(() => _activeTab = "Software")" Class="@(_activeTab == "Software" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Code">Logische Zuweisungen</MudNavLink>
                 }
 
-                @if (IsCategory("Service")) {
-                    <MudNavLink OnClick="@(() => _activeTab = "ServiceDetails")" Class="@(_activeTab == "ServiceDetails" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.AutoAwesome">Service-Level</MudNavLink>
-                }
+                <MudNavLink OnClick="@(() => _activeTab = "CustomFields")" Class="@(_activeTab == "CustomFields" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.DisplaySettings">Spezifikationen (Vorlage)</MudNavLink>
 
                 <div class="pdq-section-header">Management</div>
+                <MudNavLink OnClick="@(() => _activeTab = "Links")" Class="@(_activeTab == "Links" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.AccountTree">Abhängigkeiten (Links)</MudNavLink>
                 <MudNavLink OnClick="@(() => _activeTab = "History")" Class="@(_activeTab == "History" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.History">Audit-Log</MudNavLink>
             </MudNavMenu>
         </div>
@@ -69,38 +66,26 @@
                         <div class="pdq-section-header">Stammdaten</div>
                         <div class="pdq-grid"><div class="pdq-label">Asset-Tag</div><div class="pdq-value">@(_asset.AssetTag ?? "---")</div></div>
                         <div class="pdq-grid"><div class="pdq-label">Seriennummer (S/N)</div><div class="pdq-value">@(_asset.SerialNumber ?? "---")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Kategorie</div><div class="pdq-value">@(_asset.AssetType?.Name ?? "---")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Kategorie</div><div class="pdq-value">@(GetCategoryPath(_asset.AssetTypeId))</div></div>
 
                         <div class="pdq-section-header mt-4">System Metadaten</div>
-                        @* FIX: Lokalzeit-Konvertierung für Scan-Zeitstempel aus dem JSON *@
                         <div class="pdq-grid">
                             <div class="pdq-label">Letzter Scan</div>
                             <div class="pdq-value">@FormatDynDate("General", "LastScan")</div>
                         </div>
 
                         <div class="pdq-section-header mt-4">Lokations-Hierarchie</div>
-                        <div class="pdq-grid"><div class="pdq-label">Land / Region</div><div class="pdq-value">@GetVal("Location", "Country")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Bundesland</div><div class="pdq-value">@GetVal("Location", "State")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Gemeinde / Stadt</div><div class="pdq-value">@GetVal("Location", "City")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Gebäude / Bauteil</div><div class="pdq-value">@GetVal("Location", "Building")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Etage / Stockwerk</div><div class="pdq-value">@GetVal("Location", "Floor")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Raum</div><div class="pdq-value">@GetVal("Location", "Room")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Stellplatz / Rack</div><div class="pdq-value">@GetVal("Location", "Rack")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Standort / Gebäude</div><div class="pdq-value">@(GetLocationPath(_asset.LocationId))</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Raum-Info</div><div class="pdq-value">@(_asset.Location?.RoomNumber ?? "---")</div></div>
                     </MudItem>
 
                     <MudItem xs="12" lg="6">
                         <div class="pdq-section-header">Organisation & Rollen</div>
-                        <div class="pdq-grid"><div class="pdq-label">Zugeordneter Nutzer</div><div class="pdq-value">@GetVal("Organization", "User")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Vorgesetzter</div><div class="pdq-value">@GetVal("Organization", "Manager")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">C-Level Sponsor</div><div class="pdq-value">@GetVal("Organization", "CLevel")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Zuständiges Team</div><div class="pdq-value">@GetVal("Organization", "Team")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Kostenstelle</div><div class="pdq-value">@GetVal("Organization", "CostCenter")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Zugeordneter Nutzer</div><div class="pdq-value">@(_asset.Owner != null ? $"{_asset.Owner.FirstName} {_asset.Owner.LastName}" : "---")</div></div>
+                        <div class="pdq-grid"><div class="pdq-label">Abteilung / Team</div><div class="pdq-value">@(_asset.Owner?.Department ?? "---")</div></div>
 
                         <div class="pdq-section-header mt-4">Externe Partner & Lieferanten</div>
                         <div class="pdq-grid"><div class="pdq-label">Hersteller</div><div class="pdq-value">@(_asset.Manufacturer?.Name ?? "---")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Lieferant (Vendor)</div><div class="pdq-value">@GetVal("Partners", "Vendor")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Dienstleister (MSP)</div><div class="pdq-value">@GetVal("Partners", "MSP")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Wartungspartner</div><div class="pdq-value">@GetVal("Partners", "MaintenancePartner")</div></div>
                     </MudItem>
                 </MudGrid>
             }
@@ -108,8 +93,6 @@
                 <MudGrid Spacing="1">
                     <MudItem xs="12" lg="6">
                         <div class="pdq-section-header">Physische Konfiguration</div>
-                        <div class="pdq-grid"><div class="pdq-label">Modell</div><div class="pdq-value">@GetVal("System", "Model")</div></div>
-                        <div class="pdq-grid"><div class="pdq-label">Chassis</div><div class="pdq-value">@GetVal("System", "Chassis")</div></div>
                         <div class="pdq-grid"><div class="pdq-label">Prozessor</div><div class="pdq-value">@GetVal("Hardware", "CPU")</div></div>
                         <div class="pdq-grid"><div class="pdq-label">Arbeitsspeicher</div><div class="pdq-value">@GetVal("Hardware", "RAM")</div></div>
                     </MudItem>
@@ -121,7 +104,7 @@
                     }
                 </MudGrid>
             }
-            else if (_activeTab == "Software") {
+            else if (_activeTab == "Network") {
                 <div class="pdq-section-header">Netzwerk-Interfaces (IPv4/v6)</div>
                 <MudDataGrid T="IpAddress" Items="@_asset.NetworkInterfaces" Dense="true" Bordered="true" Elevation="0">
                     <Columns>
@@ -131,6 +114,39 @@
                     </Columns>
                 </MudDataGrid>
             }
+            else if (_activeTab == "CustomFields") {
+                <div class="pdq-section-header">Dynamische Spezifikationen (Gemäß Vorlage)</div>
+                <MudGrid Spacing="1">
+                    <MudItem xs="12">
+                        @foreach (var field in GetCustomFields()) {
+                            <div class="pdq-grid"><div class="pdq-label">@field.Key</div><div class="pdq-value">@field.Value</div></div>
+                        }
+                        @if (!GetCustomFields().Any()) {
+                            <div class="pa-4 text-muted">Keine spezifischen Felder in der Vorlage ausgefüllt.</div>
+                        }
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (_activeTab == "Links") {
+                <div class="pdq-section-header">CMDB Abhängigkeiten (Impact-Graph)</div>
+                @if (_assetLinks != null && _assetLinks.Any()) {
+                    <MudDataGrid T="AssetLinkDto" Items="@_assetLinks" Dense="true" Bordered="true" Elevation="0">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Direction" Title="Richtung" />
+                            <PropertyColumn Property="x => x.Type" Title="Art der Beziehung" />
+                            <TemplateColumn Title="Verknüpftes Asset">
+                                <CellTemplate>
+                                    <MudLink Href="@($"/assets/{context.Item.TargetId}")" Typo="Typo.body2" Class="font-weight-bold">
+                                        @context.Item.TargetName
+                                    </MudLink>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </MudDataGrid>
+                } else {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">Dieses Asset hat noch keine Abhängigkeiten oder Verknüpfungen.</MudAlert>
+                }
+            }
         </div>
     </div>
 }
@@ -138,47 +154,114 @@
 @code {
     [Parameter] public Guid Id { get; set; }
     private Asset? _asset;
+    private List<AssetLinkDto> _assetLinks = new();
+    private List<AssetType> _assetTypes = new();
+    private List<Location> _locations = new();
+    
     private string _activeTab = "General";
     private bool _isLoading = true;
     private bool _isEditMode = false;
 
+    public class AssetLinkDto {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = "";
+        public Guid TargetId { get; set; }
+        public string TargetName { get; set; } = "";
+        public string Direction { get; set; } = "";
+    }
+
     protected override async Task OnInitializedAsync() {
-        try { _asset = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}"); }
+        try { 
+            _assetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new();
+            _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new();
+            _asset = await Http.GetFromJsonAsync<Asset>($"api/assets/{Id}"); 
+            try {
+                _assetLinks = await Http.GetFromJsonAsync<List<AssetLinkDto>>($"api/assets/{Id}/links") ?? new();
+            } catch { }
+        }
         catch { Snackbar.Add("Fehler beim Laden", Severity.Error); }
         finally { _isLoading = false; }
+    }
+
+    private string GetLocationPath(Guid? locationId) {
+        if (locationId == null) return "---";
+        var loc = _locations.FirstOrDefault(l => l.Id == locationId);
+        if (loc == null) return "---";
+        var path = loc.Name;
+        var parentId = loc.ParentLocationId;
+        int depth = 0;
+        while (parentId.HasValue && depth < 10) {
+            var parent = _locations.FirstOrDefault(l => l.Id == parentId);
+            if (parent != null) { path = parent.Name + " > " + path; parentId = parent.ParentLocationId; depth++; }
+            else break;
+        }
+        return path;
+    }
+
+    private string GetCategoryPath(Guid? typeId) {
+        if (typeId == null) return "---";
+        var type = _assetTypes.FirstOrDefault(t => t.Id == typeId);
+        if (type == null) return "---";
+        var path = type.Name;
+        var parentId = type.ParentAssetTypeId;
+        int depth = 0;
+        while (parentId.HasValue && depth < 10) {
+            var parent = _assetTypes.FirstOrDefault(l => l.Id == parentId);
+            if (parent != null) { path = parent.Name + " > " + path; parentId = parent.ParentAssetTypeId; depth++; }
+            else break;
+        }
+        return path;
     }
 
     private string GetVal(string section, string prop) {
         if (string.IsNullOrEmpty(_asset?.DynamicDataJson)) return "---";
         try {
             using var doc = JsonDocument.Parse(_asset.DynamicDataJson);
-            return doc.RootElement.TryGetProperty(section, out var s) && s.TryGetProperty(prop, out var p) ? p.ToString() : "---";
+            if (doc.RootElement.TryGetProperty(section, out var s) && s.TryGetProperty(prop, out var p)) return p.ToString();
+            if (doc.RootElement.TryGetProperty("CustomFields", out var cf) && cf.TryGetProperty(prop, out var cfp)) return cfp.ToString();
+            return "---";
         } catch { return "---"; }
     }
 
-    // Hilfsmethode zur Lokalzeit-Formatierung von dynamischen JSON-Werten
+    private Dictionary<string, string> GetCustomFields() {
+        var dict = new Dictionary<string, string>();
+        if (string.IsNullOrEmpty(_asset?.DynamicDataJson)) return dict;
+        try {
+            using var doc = JsonDocument.Parse(_asset.DynamicDataJson);
+            if (doc.RootElement.TryGetProperty("CustomFields", out var cf)) {
+                foreach (var prop in cf.EnumerateObject()) {
+                    dict.Add(prop.Name, prop.Value.ToString() ?? "");
+                }
+            }
+        } catch { }
+        return dict;
+    }
+
     private string FormatDynDate(string section, string prop) {
         var rawVal = GetVal(section, prop);
         if (rawVal == "---") return rawVal;
-        
-        if (DateTime.TryParse(rawVal, out var dt)) {
-            return ThemeService.FormatDate(dt);
-        }
+        if (DateTime.TryParse(rawVal, out var dt)) return ThemeService.FormatDate(dt);
         return rawVal;
     }
 
     private bool IsCategory(string cat) {
-        var name = _asset?.AssetType?.Name;
-        if (string.IsNullOrEmpty(name)) return false;
+        var path = GetCategoryPath(_asset?.AssetTypeId);
         return cat switch {
-            "Hardware" => name is "Rack-Server" or "Laptop" or "Desktop",
-            "Network" => name is "Core-Switch" or "Firewall" or "Router",
-            "Storage" => name is "SAN-Storage" or "NAS-System",
-            "Cloud" => name is "Cloud-Instanz",
-            "Datacenter" => name is "USV-Anlage" or "Rack",
+            "Hardware" => new[]{"Server", "Laptop", "Computer", "Tablet", "Hardware", "Smartphone", "Drucker", "AV", "Video"}.Any(x => path.Contains(x)),
+            "Network" => new[]{"Switch", "Router", "Firewall", "WLAN", "Telefon", "Funk", "Netz"}.Any(x => path.Contains(x)),
+            "Storage" => path.Contains("Storage") || path.Contains("Speicher"),
+            "Cloud" => path.Contains("Virtual") || path.Contains("Software") || path.Contains("Dienste"),
+            "Datacenter" => new[]{"USV", "PDU", "Kühlung", "Klima", "Überwachung", "Sicherheit"}.Any(x => path.Contains(x)),
             _ => false
         };
     }
 
-    private string GetIcon(string? type) => Icons.Material.Filled.Computer;
+    private string GetIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Computer;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
+        } catch {}
+        return Icons.Material.Filled.Computer;
+    }
 }

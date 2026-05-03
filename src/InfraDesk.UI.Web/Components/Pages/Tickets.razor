@@ -5,6 +5,8 @@
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
 @using System.Text.Json
+@using System.Threading.Tasks
+@using System.Linq
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ThemeService ThemeService
@@ -55,7 +57,6 @@
             <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Class="mr-3" />Nicht zugewiesen
         </div>
 
-        <!-- DYNAMISCHER STATUS FILTER -->
         <div class="pdq-section-header">Status Filter</div>
         @foreach(var status in _ticketStatuses)
         {
@@ -65,7 +66,6 @@
             </div>
         }
         
-        <!-- DYNAMISCHER PRIORITÄT FILTER -->
         <div class="pdq-section-header">Priorität Filter</div>
         @foreach(var prio in _ticketPriorities)
         {
@@ -91,17 +91,17 @@
     </div>
 
     <div class="pdq-content">
-        @if (_tickets == null) {
+        @if (_isLoading) {
             <div class="d-flex justify-center align-center" style="height: 200px;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
         } else {
-            <MudDataGrid T="Ticket" Items="@FilteredTickets" Dense="true" Bordered="true" Hover="true" Elevation="0" 
+            <MudDataGrid T="Ticket" Items="@_filteredTickets" Dense="true" Bordered="true" Hover="true" Elevation="0" 
                          MultiSelection="true" @bind-SelectedItems="_selectedItems" Filterable="true" RowClick="@OnRowClicked">
                 <ToolBarContent>
                     <MudSpacer />
                     
-                    <MudSwitch T="bool" @bind-Value="_showClosed" Label="Geschlossene einblenden" Color="Color.Primary" Class="mt-1 mr-4" />
+                    <MudSwitch T="bool" Value="@_showClosed" ValueChanged="OnShowClosedChanged" Label="Geschlossene einblenden" Color="Color.Primary" Class="mt-1 mr-4" />
                     
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche nach Titel oder Nummer..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0 mr-4" Style="max-width: 300px;" />
+                    <MudTextField T="string" Value="@_searchString" ValueChanged="OnSearchChanged" Immediate="true" Placeholder="Suche nach Titel oder Nummer..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0 mr-4" Style="max-width: 300px;" />
 
                     <MudTooltip Text="Spalten anpassen">
                         <MudMenu Icon="@Icons.Material.Filled.ViewColumn" 
@@ -199,7 +199,10 @@
 </div>
 
 @code {
-    private List<Ticket>? _tickets;
+    private List<Ticket> _tickets = new();
+    private List<Ticket> _filteredTickets = new();
+    private bool _isLoading = true;
+    
     private string _searchString = "";
     private string? _activeFilter = null;
     private HashSet<Ticket> _selectedItems = new();
@@ -207,12 +210,12 @@
     private string _currentUserEmail = "";
     private bool _showClosed = false;
     
-    // DIE NEUEN STRUKTUREN
     public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
     public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
     private List<TicketStatusItem> _ticketStatuses = new();
     private List<TicketPriorityItem> _ticketPriorities = new();
+    private static readonly Dictionary<string, string> _iconCache = new();
 
     public class ColumnDef { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public bool Visible { get; set; } = true; public int Order { get; set; } }
     
@@ -232,48 +235,85 @@
         public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }
 
-    private IEnumerable<Ticket> FilteredTickets => _tickets?.Where(x => 
-        (string.IsNullOrWhiteSpace(_searchString) || 
-         x.Title.Contains(_searchString, StringComparison.OrdinalIgnoreCase) || 
-         x.TicketNumber.ToString().Contains(_searchString)) &&
-         
-        (_showClosed || _activeFilter == x.Status || !x.Status.Equals("GESCHLOSSEN", StringComparison.OrdinalIgnoreCase)) &&
-        
-        (string.IsNullOrEmpty(_activeFilter) || _activeFilter == "Alle" ||
-         (_activeFilter == "Meins" && (x.Requester?.Email == _currentUserEmail || x.Supporter?.Email == _currentUserEmail)) ||
-         (_activeFilter == "NichtZugewiesen" && x.SupporterId == null) ||
-         (_activeFilter != "Meins" && _activeFilter != "NichtZugewiesen" && 
-            (x.Status.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) || 
-             x.Category1?.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) == true ||
-             x.Priority.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase))))
-    ) ?? Enumerable.Empty<Ticket>();
-
     protected override async Task OnInitializedAsync() {
+        _isLoading = true;
         try { 
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             _currentUserEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "admin@infradesk.local";
             
-            try {
-                var settings = await Http.GetFromJsonAsync<SettingsDto>("api/settings/masterdata");
-                if (settings != null) {
-                    _activeFilter = settings.TicketDefaultFilter;
-                    _showClosed = settings.TicketShowClosed;
-                    
-                    if (settings.TicketStatusList?.Any() == true) _ticketStatuses = settings.TicketStatusList;
-                    if (settings.TicketPriorityList?.Any() == true) _ticketPriorities = settings.TicketPriorityList;
-                }
-            } catch { }
+            // Asynchrones paralleles Laden reduziert die Gesamt-Wartezeit
+            var taskSettings = SafeGetAsync("api/settings/masterdata", new SettingsDto());
+            var taskTickets = SafeGetAsync("api/tickets", new List<Ticket>());
 
-            // Fallback falls die Datenbank komplett leer ist
+            await Task.WhenAll(taskSettings, taskTickets);
+
+            var settings = await taskSettings;
+            if (settings != null) {
+                _activeFilter = settings.TicketDefaultFilter;
+                _showClosed = settings.TicketShowClosed;
+                
+                if (settings.TicketStatusList?.Any() == true) _ticketStatuses = settings.TicketStatusList;
+                if (settings.TicketPriorityList?.Any() == true) _ticketPriorities = settings.TicketPriorityList;
+            }
+
             if (!_ticketStatuses.Any()) _ticketStatuses.Add(new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" });
             if (!_ticketPriorities.Any()) _ticketPriorities.Add(new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" });
 
-            _tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets"); 
+            _tickets = await taskTickets; 
+            
+            ApplyFilter();
         }
-        catch { _tickets = new(); }
+        catch { Snackbar.Add("Fehler beim Laden der Tickets.", Severity.Error); }
+        finally { _isLoading = false; }
     }
 
-    private void SetFilter(string? filter) => _activeFilter = filter;
+    private async Task<T?> SafeGetAsync<T>(string url, T defaultVal)
+    {
+        try {
+            var res = await Http.GetFromJsonAsync<T>(url);
+            return res != null ? res : defaultVal;
+        } catch {
+            return defaultVal;
+        }
+    }
+
+    // --- FILTER & EVENT HANDLER (Entkoppelt vom permanenten Render-Loop) ---
+    private void OnSearchChanged(string text)
+    {
+        _searchString = text;
+        ApplyFilter();
+    }
+
+    private void OnShowClosedChanged(bool value)
+    {
+        _showClosed = value;
+        ApplyFilter();
+    }
+
+    private void SetFilter(string? filter) 
+    { 
+        _activeFilter = filter; 
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _filteredTickets = _tickets.Where(x => 
+            (string.IsNullOrWhiteSpace(_searchString) || 
+             x.Title.Contains(_searchString, StringComparison.OrdinalIgnoreCase) || 
+             x.TicketNumber.ToString().Contains(_searchString)) &&
+             
+            (_showClosed || _activeFilter == x.Status || !x.Status.Equals("GESCHLOSSEN", StringComparison.OrdinalIgnoreCase)) &&
+            
+            (string.IsNullOrEmpty(_activeFilter) || _activeFilter == "Alle" ||
+             (_activeFilter == "Meins" && (x.Requester?.Email == _currentUserEmail || x.Supporter?.Email == _currentUserEmail)) ||
+             (_activeFilter == "NichtZugewiesen" && x.SupporterId == null) ||
+             (_activeFilter != "Meins" && _activeFilter != "NichtZugewiesen" && 
+                (x.Status.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) || 
+                 x.Category1?.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) == true ||
+                 x.Priority.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase))))
+        ).ToList();
+    }
     
     private void OnRowClicked(DataGridRowClickEventArgs<Ticket> args) => Nav.NavigateTo($"/tickets/{args.Item.Id}");
     
@@ -284,19 +324,29 @@
         if (col.Order < _columns.Count) { var next = _columns.First(c => c.Order == col.Order + 1); next.Order--; col.Order++; StateHasChanged(); }
     }
 
-    // Wandelt einen Text in das native MudBlazor SVG-Icon um (Geniale Reflection!)
     private string GetDynamicIcon(string? iconName) {
         if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
+        if (_iconCache.TryGetValue(iconName, out var cachedIcon)) return cachedIcon;
+        
         try {
             var field = typeof(Icons.Material.Filled).GetField(iconName);
-            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
-        } catch {}
-        return Icons.Material.Filled.Label;
+            var icon = field?.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
+            _iconCache[iconName] = icon;
+            return icon;
+        } catch { return Icons.Material.Filled.Label; }
     }
 
     private void ExportCsv() => Snackbar.Add("CSV Export wird vorbereitet...");
     private void ImportCsv(InputFileChangeEventArgs e) => Snackbar.Add("CSV Import gestartet...");
     
-    private string GetItilIcon(string? c) => c switch { "Incident (Störung)" => Icons.Material.Filled.Bolt, "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart, "Change (Änderung)" => Icons.Material.Filled.Settings, "Problem (Problem)" => Icons.Material.Filled.Search, _ => Icons.Material.Filled.Label };
+    private string GetItilIcon(string? c) {
+        var key = "ITIL_ICON_" + (c ?? "none");
+        if (_iconCache.TryGetValue(key, out var cachedIcon)) return cachedIcon;
+        
+        var icon = c switch { "Incident (Störung)" => Icons.Material.Filled.Bolt, "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart, "Change (Änderung)" => Icons.Material.Filled.Settings, "Problem (Problem)" => Icons.Material.Filled.Search, _ => Icons.Material.Filled.Label };
+        _iconCache[key] = icon;
+        return icon;
+    }
+
     private Color GetItilColor(string? c) => c switch { "Incident (Störung)" => Color.Error, "Service Request (Serviceanfrage)" => Color.Info, "Change (Änderung)" => Color.Warning, "Problem (Problem)" => Color.Dark, _ => Color.Default };
 }

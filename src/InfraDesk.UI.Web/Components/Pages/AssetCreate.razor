@@ -23,6 +23,7 @@
     .wizard-step.completed { color: var(--mud-palette-success); }
     
     .template-builder-box { border: 2px dashed var(--mud-palette-secondary); padding: 16px; background-color: #fafafa; border-radius: 8px; margin-top: 16px; }
+    .hierarchy-box { background: #fdfdfd; border: 1px solid #eee; padding: 16px; border-radius: 4px; margin-bottom: 16px; }
 </style>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-8">
@@ -80,32 +81,47 @@
                             <MudItem xs="12" md="4"><MudTextField Value="CompanyPrefix" Label="Firma (Kürzel)" Variant="Variant.Outlined" ReadOnly="true" Margin="Margin.Dense" /></MudItem>
                             <MudItem xs="12" md="8">
                                 <MudSelect T="Guid?" Label="Physischer Standort" @bind-Value="SelectedLocationId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                                    @foreach (var loc in _locations) { <MudSelectItem T="Guid?" Value="@loc.Id">@loc.Name</MudSelectItem> }
+                                    @foreach (var loc in _locations.OrderBy(l => GetLocationPath(l.Id))) { 
+                                        <MudSelectItem T="Guid?" Value="@loc.Id">@GetLocationPath(loc.Id)</MudSelectItem> 
+                                    }
                                 </MudSelect>
                             </MudItem>
                         </MudGrid>
 
-                        <div class="pdq-section-header">Kategorisierung</div>
-                        <MudGrid Spacing="2">
-                            <MudItem xs="12" md="4">
-                                <MudSelect T="string" Label="Hauptkategorie" @bind-Value="SelectedCategory" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    @foreach (var cat in _categories) { <MudSelectItem Value="@cat">@cat</MudSelectItem> }
-                                </MudSelect>
-                            </MudItem>
-                            <MudItem xs="12" md="8">
-                                @if (!string.IsNullOrEmpty(SelectedCategory))
-                                {
-                                    <MudSelect T="AssetType" Label="Spezifischer Asset-Typ" @bind-Value="SelectedType" Variant="Variant.Outlined" Margin="Margin.Dense" ToStringFunc="@(t => t == null ? "" : t.Name)">
-                                        @foreach (var type in _availableTypes.Where(t => GetCategoryForType(t.Id) == SelectedCategory))
-                                        {
-                                            <MudSelectItem Value="@type">
-                                                <div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Label" Size="Size.Small" Class="mr-3" Color="Color.Primary"/>@type.Name</div>
-                                            </MudSelectItem>
-                                        }
-                                    </MudSelect>
+                        <div class="pdq-section-header">Hierarchische Kategorisierung</div>
+                        <MudText Typo="Typo.body2" Class="mb-4 text-muted">Folgen Sie der Hierarchie, um die genaue Klassifizierung dieses Assets festzulegen.</MudText>
+                        
+                        <div class="hierarchy-box">
+                            <MudSelect T="Guid?" Label="Hauptsäule (Pillar)" @bind-Value="SelectedRootId" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4">
+                                @foreach (var type in _dynamicAssetTypes.Where(t => t.ParentAssetTypeId == null).OrderBy(t => t.Name)) {
+                                    <MudSelectItem T="Guid?" Value="@type.Id"><div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(type.IconKey)" Size="Size.Small" Class="mr-2"/> @type.Name</div></MudSelectItem>
                                 }
-                            </MudItem>
-                        </MudGrid>
+                            </MudSelect>
+
+                            @if (SelectedRootId.HasValue) {
+                                <MudSelect T="Guid?" Label="Ebene 1 (Klasse)" @bind-Value="SelectedL1Id" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4">
+                                    @foreach (var type in _dynamicAssetTypes.Where(t => t.ParentAssetTypeId == SelectedRootId.Value).OrderBy(t => t.Name)) {
+                                        <MudSelectItem T="Guid?" Value="@type.Id">@type.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+
+                            @if (SelectedL1Id.HasValue) {
+                                <MudSelect T="Guid?" Label="Ebene 2 (Typ)" @bind-Value="SelectedL2Id" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4">
+                                    @foreach (var type in _dynamicAssetTypes.Where(t => t.ParentAssetTypeId == SelectedL1Id.Value).OrderBy(t => t.Name)) {
+                                        <MudSelectItem T="Guid?" Value="@type.Id"><div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(type.IconKey)" Size="Size.Small" Class="mr-2"/> @type.Name</div></MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+
+                            @if (SelectedL2Id.HasValue) {
+                                <MudSelect T="Guid?" Label="Ebene 3 (Spezifikation) *" @bind-Value="SelectedTypeId" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
+                                    @foreach (var type in _dynamicAssetTypes.Where(t => t.ParentAssetTypeId == SelectedL2Id.Value).OrderBy(t => t.Name)) {
+                                        <MudSelectItem T="Guid?" Value="@type.Id"><div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(type.IconKey)" Size="Size.Small" Class="mr-2"/> @type.Name</div></MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                        </div>
                     }
                 }
 
@@ -129,7 +145,6 @@
                     <div class="pdq-section-header">Lebenszyklus & Eigentümer</div>
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="6">
-                            <!-- DYNAMISCHES STATUS DROPDOWN -->
                             <MudSelect T="string" Label="Status *" @bind-Value="_newAsset.LifecycleStatus" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
                                 @foreach (var s in _lifecycleStatuses) {
                                     <MudSelectItem Value="@s">@s</MudSelectItem>
@@ -137,7 +152,7 @@
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="6">
-                            <MudSelect T="Guid?" Label="Verantwortlicher" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                            <MudSelect T="Guid?" Label="Verantwortlicher / Besitzer" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                                 @foreach (var p in _persons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
                             </MudSelect>
                         </MudItem>
@@ -266,27 +281,43 @@
     public class TypeTemplate { public Guid AssetTypeId { get; set; } public string CategoryName { get; set; } = "Allgemein"; public List<TemplateField> Fields { get; set; } = new(); }
     
     private List<TypeTemplate> _templates = new();
-    private List<string> _categories = new();
     private Dictionary<string, object> _dynamicData = new();
     
     private string _newFieldName = "";
     private string _newFieldType = "Text";
     private string _dynNotes = "";
 
-    // DYNAMISCHE STATUS WERTE
     private List<string> _lifecycleStatuses = new() { "Produktiv", "Auf Lager", "Ausgemustert" };
 
     public string CompanyPrefix { get => _companyPrefix; set { if (_companyPrefix != value) { _companyPrefix = value; _ = TriggerTagGeneration(); } } }
 
-    private string _selectedCategory = "";
-    public string SelectedCategory { get => _selectedCategory; set { if (_selectedCategory != value) { _selectedCategory = value; if (!_isLoading) { _selectedType = null; RebuildSteps(); } } } }
+    // Kaskadierende Kategorie-Auswahl
+    private Guid? _selectedRootId;
+    public Guid? SelectedRootId { get => _selectedRootId; set { _selectedRootId = value; _selectedL1Id = null; _selectedL2Id = null; _selectedTypeId = null; } }
+    
+    private Guid? _selectedL1Id;
+    public Guid? SelectedL1Id { get => _selectedL1Id; set { _selectedL1Id = value; _selectedL2Id = null; _selectedTypeId = null; } }
+    
+    private Guid? _selectedL2Id;
+    public Guid? SelectedL2Id { get => _selectedL2Id; set { _selectedL2Id = value; _selectedTypeId = null; } }
+
+    private Guid? _selectedTypeId;
+    public Guid? SelectedTypeId { 
+        get => _selectedTypeId; 
+        set { 
+            if (_selectedTypeId != value) { 
+                _selectedTypeId = value; 
+                _selectedType = _dynamicAssetTypes.FirstOrDefault(t => t.Id == value);
+                _ = TriggerTagGeneration(); 
+                RebuildSteps();
+            } 
+        } 
+    }
     
     private AssetType? _selectedType;
-    public AssetType? SelectedType { get => _selectedType; set { if (_selectedType != value) { _selectedType = value; _ = TriggerTagGeneration(); } } }
-
     public Guid? SelectedLocationId { get => _newAsset.LocationId; set { if (_newAsset.LocationId != value) { _newAsset.LocationId = value; _ = TriggerTagGeneration(); } } }
     
-    private List<AssetType> _availableTypes = new();
+    private List<AssetType> _dynamicAssetTypes = new();
     private List<Manufacturer> _manufacturers = new();
     private List<Location> _locations = new();
     private List<Person> _persons = new();
@@ -306,9 +337,8 @@
             try { _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new(); } catch {}
             try { _persons = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch {}
             try { _subnets = await Http.GetFromJsonAsync<List<Subnet>>("api/subnets") ?? new(); } catch {}
-            try { _availableTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
+            try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
 
-            // Lade Templates aus DB
             try { 
                 var tplStr = await Http.GetStringAsync("api/settings/dynamic/AssetTemplates");
                 if (!string.IsNullOrWhiteSpace(tplStr) && tplStr != "[]") {
@@ -316,25 +346,12 @@
                 }
             } catch { }
             
-            // Lade Status Optionen
             try {
                 var lifecycleDict = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle");
                 if (lifecycleDict != null && lifecycleDict.Any()) {
                     _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
                 }
             } catch { }
-
-            bool needsSave = false;
-            foreach (var type in _availableTypes) {
-                if (!_templates.Any(t => t.AssetTypeId == type.Id)) {
-                    var tpl = new TypeTemplate { AssetTypeId = type.Id, CategoryName = GuessCategory(type.Name) };
-                    _templates.Add(tpl);
-                    needsSave = true;
-                }
-            }
-            if (needsSave) await SaveTemplatesToBackend();
-
-            _categories = _templates.Select(t => t.CategoryName).Distinct().OrderBy(c => c).ToList();
 
             if (IsEditMode)
             {
@@ -343,10 +360,9 @@
                 {
                     _newAsset = existing;
                     _interfaces = existing.NetworkInterfaces?.ToList() ?? new();
-                    if (_newAsset.AssetType != null)
+                    if (_newAsset.AssetTypeId != Guid.Empty)
                     {
-                        _selectedType = _availableTypes.FirstOrDefault(t => t.Id == _newAsset.AssetTypeId);
-                        _selectedCategory = GetCategoryForType(_newAsset.AssetTypeId);
+                        PreFillCategoryCascades(_newAsset.AssetTypeId);
                     }
                     LoadDynamicData();
                 }
@@ -361,15 +377,65 @@
         finally { _isLoading = false; }
     }
 
-    private string GuessCategory(string typeName) {
-        if (new[]{"Laptop","Desktop","Workstation","Tablet","Smartphone","Rack-Server"}.Any(x => typeName.Contains(x))) return "Hardware";
-        if (new[]{"Switch","Router","Firewall","Access-Point"}.Any(x => typeName.Contains(x))) return "Netzwerk";
-        if (new[]{"Storage","NAS","SAN"}.Any(x => typeName.Contains(x))) return "Storage";
-        if (new[]{"Betriebssystem","Software","SQL","Datenbank"}.Any(x => typeName.Contains(x))) return "Software";
-        return "Allgemein";
+    private void PreFillCategoryCascades(Guid typeId) {
+        var l3 = _dynamicAssetTypes.FirstOrDefault(t => t.Id == typeId);
+        if (l3 != null) {
+            _selectedTypeId = l3.Id;
+            _selectedType = l3;
+            var l2 = _dynamicAssetTypes.FirstOrDefault(t => t.Id == l3.ParentAssetTypeId);
+            if (l2 != null) {
+                _selectedL2Id = l2.Id;
+                var l1 = _dynamicAssetTypes.FirstOrDefault(t => t.Id == l2.ParentAssetTypeId);
+                if (l1 != null) {
+                    _selectedL1Id = l1.Id;
+                    _selectedRootId = l1.ParentAssetTypeId;
+                }
+            }
+        }
     }
 
-    private string GetCategoryForType(Guid id) => _templates.FirstOrDefault(t => t.AssetTypeId == id)?.CategoryName ?? "Allgemein";
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Folder;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Folder;
+        } catch {}
+        return Icons.Material.Filled.Folder;
+    }
+
+    private string GetLocationPath(Guid? locationId)
+    {
+        if (locationId == null) return "---";
+        var loc = _locations.FirstOrDefault(l => l.Id == locationId);
+        if (loc == null) return "---";
+        var path = loc.Name;
+        var parentId = loc.ParentLocationId;
+        int depth = 0;
+        while (parentId.HasValue && depth < 10) 
+        {
+            var parent = _locations.FirstOrDefault(l => l.Id == parentId);
+            if (parent != null) { path = parent.Name + " > " + path; parentId = parent.ParentLocationId; depth++; }
+            else break;
+        }
+        return path;
+    }
+
+    private string GetCategoryPath(Guid? typeId)
+    {
+        if (typeId == null) return "---";
+        var type = _dynamicAssetTypes.FirstOrDefault(t => t.Id == typeId);
+        if (type == null) return "---";
+        var path = type.Name;
+        var parentId = type.ParentAssetTypeId;
+        int depth = 0;
+        while (parentId.HasValue && depth < 10) 
+        {
+            var parent = _dynamicAssetTypes.FirstOrDefault(l => l.Id == parentId);
+            if (parent != null) { path = parent.Name + " > " + path; parentId = parent.ParentAssetTypeId; depth++; }
+            else break;
+        }
+        return path;
+    }
 
     private async Task SaveTemplatesToBackend() {
         try {
@@ -382,10 +448,9 @@
     private void AddFieldToTemplate() {
         if (string.IsNullOrWhiteSpace(_newFieldName) || _selectedType == null) return;
         var tpl = _templates.FirstOrDefault(t => t.AssetTypeId == _selectedType.Id);
-        if (tpl != null) {
-            tpl.Fields.Add(new TemplateField { Name = _newFieldName, Type = _newFieldType });
-            _newFieldName = "";
-        }
+        if (tpl == null) { tpl = new TypeTemplate { AssetTypeId = _selectedType.Id, CategoryName = _selectedType.Name }; _templates.Add(tpl); }
+        tpl.Fields.Add(new TemplateField { Name = _newFieldName, Type = _newFieldType });
+        _newFieldName = "";
     }
 
     private void RemoveFieldFromTemplate(TypeTemplate tpl, TemplateField f) => tpl.Fields.Remove(f);
@@ -414,11 +479,14 @@
     private void RebuildSteps()
     {
         ActiveSteps.Clear();
-        ActiveSteps.Add(new WizardStep { Id = "Category", Name = "Vorlage", Icon = Icons.Material.Filled.Category });
+        ActiveSteps.Add(new WizardStep { Id = "Category", Name = "Kategorie (Spezifikation)", Icon = Icons.Material.Filled.Category });
         ActiveSteps.Add(new WizardStep { Id = "Basics", Name = "Stammdaten", Icon = Icons.Material.Filled.Info });
         ActiveSteps.Add(new WizardStep { Id = "Specs", Name = "Spezifikationen", Icon = Icons.Material.Filled.DisplaySettings });
         
-        if (SelectedCategory is "Hardware" or "Netzwerk" or "Storage" or "Datacenter")
+        string catPath = GetCategoryPath(_selectedTypeId);
+        bool showNetwork = new[]{"Server", "Switch", "Router", "Firewall", "Storage", "USV", "WLAN", "Telefon", "Laptop", "PC", "Tablet", "Video"}.Any(x => catPath.Contains(x));
+
+        if (showNetwork)
             ActiveSteps.Add(new WizardStep { Id = "Network", Name = "IPAM", Icon = Icons.Material.Filled.Lan });
             
         if (_currentStepIndex >= ActiveSteps.Count) _currentStepIndex = ActiveSteps.Count > 0 ? ActiveSteps.Count - 1 : 0;

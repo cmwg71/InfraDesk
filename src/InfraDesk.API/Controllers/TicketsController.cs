@@ -20,13 +20,34 @@ public class TicketsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Ticket>>> GetTickets()
     {
-        return await _context.Tickets
-            .Include(t => t.Requester)
-            .Include(t => t.Supporter)
-            .Include(t => t.ChildTickets)
+        // PERFORMANCE OPTIMIERUNG:
+        // Durch das explizite .Select() verhindern wir einen massiven Overhead und das Laden
+        // von Child-Tickets, Watchers, Assets und langen Beschreibungen (Descriptions).
+        // Das reduziert die Payload drastisch und macht die Listenansicht blitzschnell.
+        var tickets = await _context.Tickets
+            .AsNoTracking()
             .OrderByDescending(t => t.TicketNumber)
-            .AsSplitQuery()
+            .Select(t => new Ticket
+            {
+                Id = t.Id,
+                TenantId = t.TenantId,
+                TicketNumber = t.TicketNumber,
+                Title = t.Title,
+                Status = t.Status,
+                Priority = t.Priority,
+                Category1 = t.Category1,
+                Category2 = t.Category2,
+                Category3 = t.Category3,
+                CreatedAt = t.CreatedAt,
+                RequesterId = t.RequesterId,
+                Requester = t.Requester != null ? new Person { Id = t.Requester.Id, FirstName = t.Requester.FirstName, LastName = t.Requester.LastName, Email = t.Requester.Email } : null,
+                SupporterId = t.SupporterId,
+                Supporter = t.Supporter != null ? new Person { Id = t.Supporter.Id, FirstName = t.Supporter.FirstName, LastName = t.Supporter.LastName, Email = t.Supporter.Email } : null
+                // Description und komplexe Listen werden hier absichtlich ignoriert!
+            })
             .ToListAsync();
+
+        return Ok(tickets);
     }
 
     [HttpGet("{id}")]
