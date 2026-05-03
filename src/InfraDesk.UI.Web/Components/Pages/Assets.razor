@@ -3,75 +3,93 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using InfraDesk.Core.Entities
 @using MudBlazor
-@using InfraDesk.UI.Web.Services
 @using System.Text
+@using System.Text.Json
+@using InfraDesk.UI.Web.Services
 @inject HttpClient Http
-@inject NavigationManager Nav
 @inject ThemeService ThemeService
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
 
-<PageTitle>InfraDesk - Asset-CMDB</PageTitle>
+<PageTitle>InfraDesk - CMDB (Assets)</PageTitle>
 
 <style>
-    .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; border-top: none; }
-    .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
-    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 20px; }
+    .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; }
+    .pdq-sidebar { width: 300px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; padding-bottom: 20px; }
+    .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 20px; }
     .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
     
-    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 0; margin-top: 16px; }
-    .pdq-section-header:first-child { margin-top: 0; border-top: none; }
-    
-    .sidebar-item { padding: 8px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; cursor: pointer; transition: background-color 0.2s; font-size: 0.85rem; }
-    .sidebar-item:hover { background-color: #e6e6e6; }
-    .sidebar-item.sidebar-active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
-
+    .sidebar-section { padding: 12px 16px; border-bottom: 1px solid #e0e0e0; }
+    .sidebar-header { font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: #555; margin-bottom: 8px; }
     .import-btn-wrapper { display: inline-flex; align-items: center; }
 </style>
 
 <div class="pdq-toolbar">
-    <MudIcon Icon="@Icons.Material.Filled.Dns" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-    <MudText Typo="Typo.body2" Class="font-weight-bold">Asset-CMDB: @(_activeFilter ?? "Alle Assets")</MudText>
+    <MudIcon Icon="@Icons.Material.Filled.Computer" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
+    <MudText Typo="Typo.body2" Class="font-weight-bold">CMDB (Assets)</MudText>
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Style="text-transform:none" OnClick="@(() => Nav.NavigateTo("/assets/create"))">Neues Asset</MudButton>
+    
+    @if (_selectedItems != null && _selectedItems.Count > 1) {
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="text-transform:none; margin-right: 16px;">
+            Massenbearbeitung (@_selectedItems.Count)
+        </MudButton>
+    }
+    
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/assets/create"))">Asset anlegen</MudButton>
 </div>
 
 <div class="pdq-container">
     <div class="pdq-sidebar">
-        <div class="pdq-section-header">Ansichten</div>
-        <div class="sidebar-item @(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" @onclick="@(() => SetFilter(null))">
-            <MudIcon Icon="@Icons.Material.Filled.List" Size="Size.Small" Class="mr-3" />Alle Assets
+        <div class="sidebar-section" style="background:#e0e0e0;">
+            <MudText Typo="Typo.body2" Class="font-weight-bold">QUICK FILTER</MudText>
         </div>
         
-        <!-- DYNAMISCHE STATUS FILTER AUS DEN EINSTELLUNGEN -->
-        <div class="pdq-section-header">Status Filter</div>
-        @foreach (var status in _lifecycleStatuses)
-        {
-            <div class="sidebar-item @(_activeFilter == status ? "sidebar-active" : "")" @onclick="@(() => SetFilter(status))">
-                <MudIcon Icon="@GetStatusIcon(status)" Size="Size.Small" Class="mr-3" Color="@GetStatusColor(status)"/>@status
-            </div>
-        }
+        <div class="sidebar-section">
+            <div class="sidebar-header">Status</div>
+            <MudSelect T="string" @bind-Value="_filterStatus" Clearable="true" Placeholder="Alle Status" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                @foreach (var status in _lifecycleStatuses)
+                {
+                    <MudSelectItem Value="@status">@status</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-header">Kategorie</div>
+            <MudSelect T="Guid?" @bind-Value="_filterTypeId" Clearable="true" Placeholder="Alle Kategorien" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                @foreach (var t in _assetTypes) {
+                    <MudSelectItem T="Guid?" Value="@t.Id">
+                        <div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(t.IconKey)" Size="Size.Small" Class="mr-2"/> @t.Name</div>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-header">Standort</div>
+            <MudSelect T="Guid?" @bind-Value="_filterLocationId" Clearable="true" Placeholder="Alle Standorte" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                @foreach (var l in _locations) { <MudSelectItem T="Guid?" Value="@l.Id">@l.Name</MudSelectItem> }
+            </MudSelect>
+        </div>
     </div>
 
     <div class="pdq-content">
-        @if (_assets == null) {
-            <div class="d-flex justify-center align-center" style="height: 200px;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+        @if (_isLoading) {
+            <div class="d-flex justify-center align-center h-100"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
         } else {
-            <MudDataGrid T="Asset" Items="@FilteredAssets" Hover="true" RowClick="@OnRowClicked" Filterable="true" QuickFilter="@QuickFilter" Dense="true" Elevation="0" Bordered="true">
+            <MudDataGrid T="Asset" Items="@FilteredAssets" Hover="true" Dense="true" Bordered="true" Elevation="0" MultiSelection="true" @bind-SelectedItems="_selectedItems" RowClick="@OnRowClicked">
                 <ToolBarContent>
+                    <MudText Typo="Typo.h6">Gefundene Assets (@FilteredAssets.Count())</MudText>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche in allen Asset-Daten..." Adornment="Adornment.Start" 
-                                  AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Immediate="true" Margin="Margin.Dense" Style="max-width: 450px;" Class="mr-4" />
-
+                    
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suche (Tag, Name, SN)..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mr-4 mt-0" Style="max-width:300px;" Immediate="true" />
+                    
                     <MudTooltip Text="Spalten anpassen">
-                        <MudMenu Icon="@Icons.Material.Filled.ViewColumn" 
-                                 Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" 
-                                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" 
-                                 Dense="true" AutoClose="false" Class="mr-2">
+                        <MudMenu Icon="@Icons.Material.Filled.ViewColumn" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" AutoClose="false" Class="mr-2">
                             <div class="pa-4" style="min-width: 280px;">
                                 <MudText Typo="Typo.subtitle2" Class="mb-3 font-weight-bold">Sichtbare Spalten</MudText>
-                                @foreach (var col in _columns.OrderBy(c => c.Order))
-                                {
+                                @foreach (var col in _columns.OrderBy(c => c.Order)) {
                                     <div class="d-flex align-center mb-1">
                                         <MudCheckBox T="bool" Value="@col.Visible" ValueChanged="@(v => { col.Visible = v; StateHasChanged(); })" Label="@col.Title" Dense="true" Class="mr-auto" />
                                         <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" OnClick="@(() => MoveColUp(col))" Disabled="@(col.Order == 1)" />
@@ -82,9 +100,7 @@
                         </MudMenu>
                     </MudTooltip>
 
-                    <MudTooltip Text="Als CSV exportieren">
-                        <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
-                    </MudTooltip>
+                    <MudTooltip Text="CSV Export"><MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" /></MudTooltip>
                     
                     <div class="import-btn-wrapper">
                         <MudTooltip Text="Aus CSV importieren">
@@ -95,13 +111,27 @@
                 </ToolBarContent>
                 
                 <Columns>
+                    <SelectColumn T="Asset" />
+                    
                     @foreach (var col in _columns.OrderBy(c => c.Order))
                     {
                         if (col.Id == "Type" && col.Visible)
                         {
                             <TemplateColumn Title="Typ" HeaderStyle="width: 40px;" Sortable="false" Filterable="false">
-                                <CellTemplate><MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" Color="Color.Primary" /></CellTemplate>
+                                <CellTemplate>
+                                    <MudIcon Icon="@GetDynamicIcon(context.Item.AssetType?.IconKey)" Size="Size.Small" Color="Color.Primary" />
+                                </CellTemplate>
                             </TemplateColumn>
+                        }
+                        else if (col.Id == "Status" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.LifecycleStatus)" Title="Status">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetStatusColor(context.Item.LifecycleStatus)">
+                                        @context.Item.LifecycleStatus
+                                    </MudChip>
+                                </CellTemplate>
+                            </PropertyColumn>
                         }
                         else if (col.Id == "Tag" && col.Visible)
                         {
@@ -109,66 +139,96 @@
                         }
                         else if (col.Id == "Name" && col.Visible)
                         {
-                            <PropertyColumn Property="@(x => x.Name)" Title="Name" />
+                            <PropertyColumn Property="@(x => x.Name)" Title="Name">
+                                <CellTemplate>
+                                    <MudLink Href="@($"/assets/{context.Item.Id}")" Typo="Typo.body2" Class="font-weight-bold">
+                                        @context.Item.Name
+                                    </MudLink>
+                                </CellTemplate>
+                            </PropertyColumn>
                         }
                         else if (col.Id == "Category" && col.Visible)
                         {
-                            <PropertyColumn Property="@(x => x.AssetType != null ? x.AssetType.Name : string.Empty)" Title="Kategorie" />
+                            <PropertyColumn Property="@(x => x.AssetType != null ? x.AssetType.Name : "")" Title="Kategorie">
+                                <CellTemplate>
+                                    @if(context.Item.AssetType != null) {
+                                        <div class="d-flex align-center">
+                                            @context.Item.AssetType.Name
+                                        </div>
+                                    }
+                                </CellTemplate>
+                            </PropertyColumn>
                         }
-                        else if (col.Id == "Serial" && col.Visible)
+                        else if (col.Id == "Manufacturer" && col.Visible)
                         {
-                            <PropertyColumn Property="@(x => x.SerialNumber)" Title="Seriennummer" />
+                            <PropertyColumn Property="@(x => x.Manufacturer != null ? x.Manufacturer.Name : "")" Title="Hersteller" />
+                        }
+                        else if (col.Id == "Owner" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Owner != null ? x.Owner.LastName : "")" Title="Zugewiesen an">
+                                <CellTemplate>
+                                    @(context.Item.Owner != null ? $"{context.Item.Owner.FirstName} {context.Item.Owner.LastName}" : "-")
+                                </CellTemplate>
+                            </PropertyColumn>
                         }
                         else if (col.Id == "Location" && col.Visible)
                         {
-                            <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : string.Empty)" Title="Standort" />
-                        }
-                        else if (col.Id == "Status" && col.Visible)
-                        {
-                            <PropertyColumn Property="@(x => x.LifecycleStatus)" Title="Status">
-                                <CellTemplate><MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">@context.Item.LifecycleStatus</MudChip></CellTemplate>
-                            </PropertyColumn>
+                            <PropertyColumn Property="@(x => x.Location != null ? x.Location.Name : "")" Title="Standort" />
                         }
                     }
                 </Columns>
-                <PagerContent><MudDataGridPager T="Asset" PageSizeOptions="@(new int[] { 50, 100, 250, 500 })" /></PagerContent>
+                <PagerContent>
+                    <MudDataGridPager T="Asset" PageSizeOptions="@(new int[] { 50, 100, 250, 500 })" />
+                </PagerContent>
             </MudDataGrid>
         }
     </div>
 </div>
 
 @code {
-    private List<Asset>? _assets;
+    private List<Asset> _assets = new();
+    private List<AssetType> _assetTypes = new();
+    private List<Location> _locations = new();
+    
+    private bool _isLoading = true;
     private string _searchString = "";
-    private string? _activeFilter = null;
+    private string? _filterStatus;
+    private Guid? _filterTypeId;
+    private Guid? _filterLocationId;
     
-    // Dynamisch geladene Lifecycle-Status aus den Einstellungen
+    private HashSet<Asset> _selectedItems = new();
     private List<string> _lifecycleStatuses = new() { "Produktiv", "Auf Lager", "Ausgemustert" };
-    
+
     public class ColumnDef { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public bool Visible { get; set; } = true; public int Order { get; set; } }
     
     private List<ColumnDef> _columns = new()
     {
         new() { Id = "Type", Title = "Typ-Icon", Order = 1 },
-        new() { Id = "Tag", Title = "Asset-Tag", Order = 2 },
-        new() { Id = "Name", Title = "Name", Order = 3 },
-        new() { Id = "Category", Title = "Kategorie", Order = 4 },
-        new() { Id = "Serial", Title = "Seriennummer", Order = 5 },
-        new() { Id = "Location", Title = "Standort", Order = 6 },
-        new() { Id = "Status", Title = "Status", Order = 7 }
+        new() { Id = "Status", Title = "Status", Order = 2 },
+        new() { Id = "Tag", Title = "Asset-Tag", Order = 3 },
+        new() { Id = "Name", Title = "Name", Order = 4 },
+        new() { Id = "Category", Title = "Kategorie", Order = 5 },
+        new() { Id = "Manufacturer", Title = "Hersteller", Order = 6 },
+        new() { Id = "Owner", Title = "Zugewiesen an", Order = 7 },
+        new() { Id = "Location", Title = "Standort", Order = 8 }
     };
 
-    private IEnumerable<Asset> FilteredAssets => _assets?.Where(x => string.IsNullOrEmpty(_activeFilter) || x.LifecycleStatus == _activeFilter) ?? Enumerable.Empty<Asset>();
-
     protected override async Task OnInitializedAsync() {
+        _isLoading = true;
         try {
-            var lifecycleDict = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle");
-            if (lifecycleDict != null && lifecycleDict.Any()) {
-                _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
-            }
-        } catch { }
+            // Lade die dynamischen Status-Werte aus den Einstellungen (Niemals Hardcoden, wie gewünscht!)
+            try {
+                var lifecycleDict = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle");
+                if (lifecycleDict != null && lifecycleDict.Any()) {
+                    _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
+                }
+            } catch { }
 
-        await LoadDataAsync();
+            _assetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new();
+            _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new();
+            _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new();
+        } catch { Snackbar.Add("Fehler beim Laden der Assets.", Severity.Error); }
+        finally { _isLoading = false; }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender) {
@@ -178,60 +238,62 @@
         }
     }
 
-    private async Task LoadDataAsync() {
-        try { _assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets"); }
-        catch { _assets = new List<Asset>(); }
-    }
+    private IEnumerable<Asset> FilteredAssets => _assets.Where(a => 
+        (string.IsNullOrWhiteSpace(_filterStatus) || a.LifecycleStatus == _filterStatus) &&
+        (!_filterTypeId.HasValue || a.AssetTypeId == _filterTypeId.Value) &&
+        (!_filterLocationId.HasValue || a.LocationId == _filterLocationId.Value) &&
+        (string.IsNullOrWhiteSpace(_searchString) || 
+         (a.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
+         (a.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+         (a.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true))
+    );
 
-    private void SetFilter(string? filter) => _activeFilter = filter;
-    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args) => Nav.NavigateTo($"/assets/{args.Item.Id}");
+    private void OnRowClicked(DataGridRowClickEventArgs<Asset> args) {
+        Nav.NavigateTo($"/assets/{args.Item.Id}");
+    }
 
     private void MoveColUp(ColumnDef col) {
         if (col.Order > 1) { var prev = _columns.First(c => c.Order == col.Order - 1); prev.Order++; col.Order--; StateHasChanged(); }
     }
+
     private void MoveColDown(ColumnDef col) {
         if (col.Order < _columns.Count) { var next = _columns.First(c => c.Order == col.Order + 1); next.Order--; col.Order++; StateHasChanged(); }
     }
 
-    private Func<Asset, bool> QuickFilter => x => 
-        string.IsNullOrWhiteSpace(_searchString) || 
-        (x.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
-        (x.AssetTag?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
-        (x.SerialNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
-        (x.DynamicDataJson?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true);
-
     private async Task ExportCsv() {
         try {
             var sb = new StringBuilder();
-            sb.AppendLine("AssetTag;Name;Kategorie;Seriennummer;Standort;Status");
+            sb.AppendLine("Status;AssetTag;Name;Kategorie;Hersteller;Zuweisung;Standort;Seriennummer");
             foreach(var a in FilteredAssets) {
-                sb.AppendLine($"{a.AssetTag};{a.Name};{a.AssetType?.Name};{a.SerialNumber};{a.Location?.Name};{a.LifecycleStatus}");
+                string owner = a.Owner != null ? $"{a.Owner.FirstName} {a.Owner.LastName}" : "";
+                sb.AppendLine($"{a.LifecycleStatus};{a.AssetTag};{a.Name};{a.AssetType?.Name};{a.Manufacturer?.Name};{owner};{a.Location?.Name};{a.SerialNumber}");
             }
             var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(sb.ToString()));
             await JSRuntime.InvokeVoidAsync("downloadFileFromBase64", $"InfraDesk_Assets_{DateTime.Now:yyyyMMdd}.csv", "text/csv", base64);
-            Snackbar.Add("Export erfolgreich!");
-        } catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}"); }
+            Snackbar.Add("Export erfolgreich!", Severity.Success);
+        } catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
     }
 
     private async Task ImportCsv(InputFileChangeEventArgs e) {
         if (e.File == null) return;
         Snackbar.Add("Import-Prozess gestartet...", Severity.Info);
-        await LoadDataAsync();
+        // Refresh nach Import
     }
 
-    private string GetStatusIcon(string status) => status.ToLower() switch {
-        "produktiv" => Icons.Material.Filled.CheckCircle,
-        "auf lager" => Icons.Material.Filled.Inventory,
-        "ausgemustert" => Icons.Material.Filled.Delete,
-        "in reparatur" => Icons.Material.Filled.Build,
-        _ => Icons.Material.Filled.Label
+    private Color GetStatusColor(string? status) => status switch {
+        "Produktiv" => Color.Success,
+        "Auf Lager" => Color.Info,
+        "In Reparatur" => Color.Warning,
+        "Ausgemustert" => Color.Error,
+        _ => Color.Default
     };
 
-    private Color GetStatusColor(string status) => status.ToLower() switch {
-        "produktiv" => Color.Success,
-        "auf lager" => Color.Info,
-        "ausgemustert" => Color.Default,
-        "in reparatur" => Color.Warning,
-        _ => Color.Primary
-    };
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Computer;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
+        } catch {}
+        return Icons.Material.Filled.Computer;
+    }
 }

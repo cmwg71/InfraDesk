@@ -3,12 +3,14 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using InfraDesk.Core.Entities
 @using MudBlazor
+@using System.Text
 @using System.Text.Json
 @using InfraDesk.UI.Web.Services
 @inject HttpClient Http
 @inject ThemeService ThemeService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 
 <PageTitle>InfraDesk - IPAM</PageTitle>
 
@@ -18,12 +20,20 @@
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 20px; }
     .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
     .stat-card { border: 1px solid #ccc; border-radius: 4px; padding: 12px; text-align: center; flex: 1; background: #fafafa; }
+    .import-btn-wrapper { display: inline-flex; align-items: center; }
 </style>
 
 <div class="pdq-toolbar">
     <MudIcon Icon="@Icons.Material.Filled.Router" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
     <MudText Typo="Typo.body2" Class="font-weight-bold">IPAM Zentrale</MudText>
     <MudSpacer />
+    
+    @if (_selectedItems != null && _selectedItems.Count > 1) {
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small" Style="text-transform:none; margin-right: 16px;">
+            Massenbearbeitung (@_selectedItems.Count)
+        </MudButton>
+    }
+    
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/ipam/subnets/create"))">Netz hinzufügen</MudButton>
 </div>
 
@@ -48,14 +58,24 @@
                 <MudText Typo="Typo.h5" Class="font-weight-bold mr-4">@_selectedSubnetName</MudText>
                 <MudIconButton Icon="@Icons.Material.Filled.Radar" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" OnClick="TriggerManualDiscovery" Title="Discovery Scan" />
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Secondary" Variant="Variant.Outlined" Size="Size.Small" OnClick="ReloadIps" Class="ml-2" />
+                <MudSpacer />
+                
+                @* Kleine Statistik-Kacheln für das Subnetz *@
+                <div class="d-flex gap-2">
+                    <div class="stat-card py-1 px-3"><MudText Typo="Typo.h6" Color="Color.Success">@_ips.Count(i => i.IpStatus == "Free")</MudText><MudText Typo="Typo.caption">Frei</MudText></div>
+                    <div class="stat-card py-1 px-3"><MudText Typo="Typo.h6" Color="Color.Primary">@_ips.Count(i => i.IpStatus == "Used")</MudText><MudText Typo="Typo.caption">Belegt</MudText></div>
+                    <div class="stat-card py-1 px-3"><MudText Typo="Typo.h6" Color="Color.Warning">@_ips.Count(i => i.IpStatus == "Reserved")</MudText><MudText Typo="Typo.caption">Reserviert</MudText></div>
+                    <div class="stat-card py-1 px-3"><MudText Typo="Typo.h6" Color="Color.Error">@_ips.Count(i => i.IpStatus == "Rogue")</MudText><MudText Typo="Typo.caption">Rogue</MudText></div>
+                </div>
             </div>
 
-            <MudDataGrid T="IpAddress" Items="@_ips" Hover="true" Dense="true" Bordered="true">
+            <MudDataGrid T="IpAddress" Items="@_ips" Hover="true" Dense="true" Bordered="true" Elevation="0"
+                         Filterable="true" QuickFilter="@QuickFilter" MultiSelection="true" @bind-SelectedItems="_selectedItems" RowClick="@OnRowClicked">
                 <ToolBarContent>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_searchString" Placeholder="Filter..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mr-4" Style="max-width:300px;" />
                     
-                    <!-- NEU: Spaltenauswahl in IPAM -->
+                    <MudTextField @bind-Value="_searchString" Placeholder="Filter..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mr-4 mt-0" Style="max-width:300px;" Immediate="true" />
+                    
                     <MudTooltip Text="Spalten anpassen">
                         <MudMenu Icon="@Icons.Material.Filled.ViewColumn" 
                                  Size="Size.Small" 
@@ -66,12 +86,16 @@
                                  Dense="true" 
                                  AutoClose="false" 
                                  Class="mr-2">
-                            <div class="pa-4" style="min-width: 200px;">
+                            <div class="pa-4" style="min-width: 280px;">
                                 <MudText Typo="Typo.subtitle2" Class="mb-3 font-weight-bold">Sichtbare Spalten</MudText>
-                                <MudCheckBox T="bool" @bind-Value="_colIp" Label="IP-Adresse" Dense="true" />
-                                <MudCheckBox T="bool" @bind-Value="_colStatus" Label="Status" Dense="true" />
-                                <MudCheckBox T="bool" @bind-Value="_colMac" Label="MAC-Adresse" Dense="true" />
-                                <MudCheckBox T="bool" @bind-Value="_colNotes" Label="Notiz / Beschreibung" Dense="true" />
+                                @foreach (var col in _columns.OrderBy(c => c.Order))
+                                {
+                                    <div class="d-flex align-center mb-1">
+                                        <MudCheckBox T="bool" Value="@col.Visible" ValueChanged="@(v => { col.Visible = v; StateHasChanged(); })" Label="@col.Title" Dense="true" Class="mr-auto" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" OnClick="@(() => MoveColUp(col))" Disabled="@(col.Order == 1)" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" OnClick="@(() => MoveColDown(col))" Disabled="@(col.Order == _columns.Count)" />
+                                    </div>
+                                }
                             </div>
                         </MudMenu>
                     </MudTooltip>
@@ -82,12 +106,62 @@
                         <InputFile id="import-csv-ipam" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
                     </div>
                 </ToolBarContent>
+                
                 <Columns>
-                    <PropertyColumn Property="@(x => x.Address)" Title="IP" Hidden="@(!_colIp)" />
-                    <PropertyColumn Property="@(x => x.IpStatus)" Title="Status" Hidden="@(!_colStatus)" />
-                    <PropertyColumn Property="@(x => x.MacAddress)" Title="MAC" Hidden="@(!_colMac)" />
-                    <PropertyColumn Property="@(x => x.Description)" Title="Notiz" Hidden="@(!_colNotes)" />
+                    <SelectColumn T="IpAddress" />
+                    
+                    @foreach (var col in _columns.OrderBy(c => c.Order))
+                    {
+                        if (col.Id == "IP" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Address)" Title="IP-Adresse" />
+                        }
+                        else if (col.Id == "Status" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.IpStatus)" Title="Status">
+                                <CellTemplate>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetStatusColor(context.Item.IpStatus)">
+                                        @context.Item.IpStatus
+                                    </MudChip>
+                                    @if (context.Item.RequiresManualReview)
+                                    {
+                                        <MudTooltip Text="Erfordert Überprüfung (Auto-Discovery)">
+                                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="ml-2" />
+                                        </MudTooltip>
+                                    }
+                                </CellTemplate>
+                            </PropertyColumn>
+                        }
+                        else if (col.Id == "MAC" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.MacAddress)" Title="MAC-Adresse" />
+                        }
+                        else if (col.Id == "Asset" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.AssignedAsset != null ? x.AssignedAsset.Name : string.Empty)" Title="Zugewiesenes Asset">
+                                <CellTemplate>
+                                    @if (context.Item.AssignedAsset != null)
+                                    {
+                                        <MudLink Href="@($"/assets/{context.Item.AssignedAssetId}")" Typo="Typo.body2">
+                                            @context.Item.AssignedAsset.Name
+                                        </MudLink>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">---</span>
+                                    }
+                                </CellTemplate>
+                            </PropertyColumn>
+                        }
+                        else if (col.Id == "Notes" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Description)" Title="Beschreibung / Notiz" />
+                        }
+                    }
                 </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="IpAddress" PageSizeOptions="@(new int[] { 50, 100, 254, 500, 1000 })" />
+                </PagerContent>
             </MudDataGrid>
         }
     </div>
@@ -99,33 +173,97 @@
     private Guid _selectedSubnetId;
     private string _selectedSubnetName = "";
     private string _searchString = "";
+    private HashSet<IpAddress> _selectedItems = new();
 
-    // --- Status-Variablen für Spalten-Sichtbarkeit ---
-    private bool _colIp = true;
-    private bool _colStatus = true;
-    private bool _colMac = true;
-    private bool _colNotes = true;
+    public class ColumnDef { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public bool Visible { get; set; } = true; public int Order { get; set; } }
+    
+    private List<ColumnDef> _columns = new()
+    {
+        new() { Id = "IP", Title = "IP-Adresse", Order = 1 },
+        new() { Id = "Status", Title = "Status", Order = 2 },
+        new() { Id = "MAC", Title = "MAC-Adresse", Order = 3 },
+        new() { Id = "Asset", Title = "Verknüpftes Asset", Order = 4 },
+        new() { Id = "Notes", Title = "Beschreibung / Notiz", Order = 5 }
+    };
 
     protected override async Task OnInitializedAsync() {
-        _subnets = await Http.GetFromJsonAsync<List<SubnetDto>>("api/ipam/subnets") ?? new();
+        try {
+            _subnets = await Http.GetFromJsonAsync<List<SubnetDto>>("api/ipam/subnets") ?? new();
+        } catch { Snackbar.Add("Fehler beim Laden der Netzwerke.", Severity.Error); }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (firstRender) {
+            string jsCode = "window.downloadFileFromBase64 = function(fileName, contentType, base64) { var link = document.createElement('a'); link.download = fileName; link.href = 'data:' + contentType + ';base64,' + base64; document.body.appendChild(link); link.click(); document.body.removeChild(link); };";
+            await JSRuntime.InvokeVoidAsync("eval", jsCode);
+        }
     }
 
     private async Task SelectSubnet(Guid id, SubnetDto sub) {
-        _selectedSubnetId = id; _selectedSubnetName = sub.Name;
+        _selectedSubnetId = id; 
+        _selectedSubnetName = sub.Name;
+        _selectedItems.Clear();
         await ReloadIps();
     }
 
     private async Task ReloadIps() {
-        _ips = await Http.GetFromJsonAsync<List<IpAddress>>($"api/ipam/subnets/{_selectedSubnetId}/ips") ?? new();
+        try {
+            _ips = await Http.GetFromJsonAsync<List<IpAddress>>($"api/ipam/subnets/{_selectedSubnetId}/ips") ?? new();
+        } catch { Snackbar.Add("Fehler beim Laden der IPs.", Severity.Error); }
     }
 
     private async Task TriggerManualDiscovery() {
-        var res = await Http.PostAsync($"api/ipam/subnets/{_selectedSubnetId}/scan", null);
-        if (res.IsSuccessStatusCode) Snackbar.Add("Scan gestartet!");
+        try {
+            var res = await Http.PostAsync($"api/ipam/subnets/{_selectedSubnetId}/scan", null);
+            if (res.IsSuccessStatusCode) Snackbar.Add("Scan gestartet! Die Tabelle aktualisiert sich in wenigen Sekunden.", Severity.Success);
+            else Snackbar.Add("Fehler beim Starten des Scans.", Severity.Error);
+        } catch { Snackbar.Add("API nicht erreichbar.", Severity.Error); }
     }
 
-    private void ExportCsv() => Snackbar.Add("Export...");
-    private void ImportCsv(InputFileChangeEventArgs e) => Snackbar.Add("Import...");
+    private void MoveColUp(ColumnDef col) {
+        if (col.Order > 1) { var prev = _columns.First(c => c.Order == col.Order - 1); prev.Order++; col.Order--; StateHasChanged(); }
+    }
+    private void MoveColDown(ColumnDef col) {
+        if (col.Order < _columns.Count) { var next = _columns.First(c => c.Order == col.Order + 1); next.Order--; col.Order++; StateHasChanged(); }
+    }
+
+    private Func<IpAddress, bool> QuickFilter => x => 
+        string.IsNullOrWhiteSpace(_searchString) || 
+        (x.Address?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) || 
+        (x.MacAddress?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.IpStatus?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true) ||
+        (x.AssignedAsset?.Name?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true);
+
+    private void OnRowClicked(DataGridRowClickEventArgs<IpAddress> args) {
+        // Hier könnte später ein Edit-Dialog geöffnet werden. 
+        // Vorerst selektieren wir die Zeile.
+        if (_selectedItems.Contains(args.Item)) _selectedItems.Remove(args.Item);
+        else _selectedItems.Add(args.Item);
+    }
+
+    private async Task ExportCsv() {
+        try {
+            var sb = new StringBuilder();
+            sb.AppendLine("IP-Adresse;Status;MAC-Adresse;Verknüpftes Asset;Beschreibung");
+            foreach(var ip in _ips.Where(QuickFilter)) {
+                sb.AppendLine($"{ip.Address};{ip.IpStatus};{ip.MacAddress};{ip.AssignedAsset?.Name};{ip.Description}");
+            }
+            var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(sb.ToString()));
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBase64", $"InfraDesk_IPAM_{_selectedSubnetName}_{DateTime.Now:yyyyMMdd}.csv", "text/csv", base64);
+            Snackbar.Add("Export erfolgreich!", Severity.Success);
+        } catch (Exception ex) { Snackbar.Add($"Fehler: {ex.Message}", Severity.Error); }
+    }
+
+    private void ImportCsv(InputFileChangeEventArgs e) => Snackbar.Add("Import-Prozess gestartet...", Severity.Info);
+
+    private Color GetStatusColor(string? status) => status switch {
+        "Free" => Color.Success,
+        "Used" => Color.Primary,
+        "Reserved" => Color.Warning,
+        "Rogue" => Color.Error,
+        _ => Color.Default
+    };
 
     public class SubnetDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public string NetworkAddress { get; set; } = ""; public int CidrMask { get; set; } }
 }

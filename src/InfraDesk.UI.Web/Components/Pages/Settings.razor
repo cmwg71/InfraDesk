@@ -1,5 +1,6 @@
 ﻿@* Dateipfad: src/InfraDesk.UI.Web/Components/Pages/Settings.razor *@
 @page "/settings"
+@using InfraDesk.Core.Entities
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
 @using System.Net.Http.Headers
@@ -33,7 +34,6 @@
     .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
     .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
     .info-logo-monochrome { height: 60px; margin-bottom: 16px; filter: grayscale(100%) brightness(0); opacity: 0.8; }
-    .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
 
     /* Label Preview Styles */
     .label-preview-container { display: flex; justify-content: center; padding: 20px; background: #999; border-radius: 8px; }
@@ -49,7 +49,7 @@
     <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
     <MudText Typo="Typo.body2" Class="font-weight-bold">System-Konfiguration</MudText>
     <MudSpacer />
-    @if (_activeSection != "Info")
+    @if (_activeSection != "Info" && _activeSection != "AssetTypes")
     {
         <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettings" Loading="_isSaving">Speichern</MudButton>
     }
@@ -62,6 +62,7 @@
             <MudNavLink OnClick="@(() => _activeSection = "MasterData")" Class="@(_activeSection == "MasterData" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
             <MudNavLink OnClick="@(() => _activeSection = "Lifecycle")" Class="@(_activeSection == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
             <MudNavLink OnClick="@(() => _activeSection = "TagSchema")" Class="@(_activeSection == "TagSchema" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "AssetTypes")" Class="@(_activeSection == "AssetTypes" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Category">Asset Kategorien</MudNavLink>
             
             <div class="pdq-section-header">Service-Desk / ITSM</div>
             <MudNavLink OnClick="@(() => _activeSection = "TicketViews")" Class="@(_activeSection == "TicketViews" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.FilterAlt">Standard-Ansichten</MudNavLink>
@@ -123,6 +124,53 @@
                         </div>
                     </MudPaper>
                 }
+            }
+            else if (_activeSection == "AssetTypes")
+            {
+                <div class="pdq-section-header">Asset Kategorien & Symbole</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Verwalten Sie hier die Typen/Kategorien für Ihre Assets und weisen Sie passende Symbole zu.</MudText>
+                
+                <MudTable T="AssetType" Items="@_dynamicAssetTypes" Dense="true" Bordered="true" Elevation="0" Class="mb-4" Hover="true" CanCancelEdit="true" CommitEditTooltip="Speichern" CancelEditTooltip="Abbrechen" RowEditCommit="SaveAssetType">
+                    <HeaderContent>
+                        <MudTh>Kategorie-Name</MudTh>
+                        <MudTh>Beschreibung (Optional)</MudTh>
+                        <MudTh>Symbol (Icon)</MudTh>
+                        <MudTh Style="width: 50px;"></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Kategorie-Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Beschreibung">@context.Description</MudTd>
+                        <MudTd DataLabel="Symbol (Icon)">
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="@GetDynamicIcon(context.IconKey)" Size="Size.Small" Class="mr-2" Color="Color.Primary" />
+                                @context.IconKey
+                            </div>
+                        </MudTd>
+                        <MudTd Style="text-align: right;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteAssetTypeAsync(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                    <RowEditingTemplate>
+                        <MudTd DataLabel="Kategorie-Name">
+                            <MudTextField @bind-Value="context.Name" Required="true" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        </MudTd>
+                        <MudTd DataLabel="Beschreibung">
+                            <MudTextField @bind-Value="context.Description" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        </MudTd>
+                        <MudTd DataLabel="Symbol (Icon)">
+                            <MudSelect T="string" @bind-Value="context.IconKey" Margin="Margin.Dense" Variant="Variant.Outlined">
+                                @foreach(var icon in _availableIcons) {
+                                    <MudSelectItem Value="@icon">
+                                        <div class="d-flex align-center"><MudIcon Icon="@GetDynamicIcon(icon)" Size="Size.Small" Class="mr-2" Color="Color.Primary"/> @icon</div>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd></MudTd>
+                    </RowEditingTemplate>
+                </MudTable>
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAssetType">Neue Kategorie hinzufügen</MudButton>
             }
             else if (_activeSection == "TagSchema")
             {
@@ -224,7 +272,7 @@
             else if (_activeSection == "TicketLifecycle")
             {
                 <div class="pdq-section-header">Ticket Status (Workflow)</div>
-                <MudDataGrid Items="@_masterData.TicketStatusList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                <MudDataGrid T="TicketStatusItem" Items="@_masterData.TicketStatusList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
                     <Columns>
                         <PropertyColumn Property="x => x.Name" Title="Status-Name" />
                         <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
@@ -240,7 +288,7 @@
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Add(new TicketStatusItem{Name="NEU", Color="#757575", Icon="Label"}))">Neuen Status hinzufügen</MudButton>
 
                 <div class="pdq-section-header mt-8">Ticket Prioritäten</div>
-                <MudDataGrid Items="@_masterData.TicketPriorityList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                <MudDataGrid T="TicketPriorityItem" Items="@_masterData.TicketPriorityList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
                     <Columns>
                         <PropertyColumn Property="x => x.Name" Title="Prioritäts-Name" />
                         <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
@@ -290,6 +338,7 @@
                     <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" Class="mr-2" /> Entwicklung</div>
                     <div class="info-value">Christian Grams (Grams IT)</div>
                 </div>
+
                 <div class="footer-copyright">© 2026 Grams IT. Alle Rechte vorbehalten.</div>
             }
         }
@@ -303,8 +352,16 @@
     private MasterDataDto _masterData = new();
     private List<string> _timeZones = new();
     private Dictionary<string, List<string>> _lifecycleConfig = new();
+    
+    private List<AssetType> _dynamicAssetTypes = new();
+    private List<string> _availableIcons = new() { 
+        "Computer", "Laptop", "LaptopMac", "LaptopWindows", "Tablet", "Smartphone", 
+        "Storage", "Dns", "Router", "Print", "Keyboard", "Mouse", "Headset", 
+        "Security", "Memory", "Save", "Cloud", "VideoCameraFront", "DeviceHub", "Cable", "VpnKey", "Folder" 
+    };
+
     private string _tempPrimaryColor = "#004a99";
-    private string _currentVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unbekannt";
+    private string _currentVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
     private bool _isChecking = false;
     private bool _updateChecked = false;
     private bool _updateFound = false;
@@ -318,9 +375,12 @@
             _masterData = await Http.GetFromJsonAsync<MasterDataDto>("api/settings/masterdata") ?? new();
             try { _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle") ?? new(); } catch { _lifecycleConfig = new(); }
             try { _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new(); } catch { _timeZones = new List<string> { "W. Europe Standard Time" }; }
+            try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
+
             _masterData.TicketStatusList ??= new();
             _masterData.TicketPriorityList ??= new();
             _tempPrimaryColor = ThemeService.Config.PrimaryColor;
+            
             _ = CheckForUpdates();
         }
         catch { Snackbar.Add("Ladefehler.", Severity.Error); }
@@ -345,6 +405,40 @@
         finally { _isSaving = false; }
     }
 
+    private void SaveAssetType(object element)
+    {
+        _ = SaveAssetTypeAsync(element);
+    }
+
+    private async Task SaveAssetTypeAsync(object element) {
+        if (element is AssetType item) {
+            try {
+                if (item.Id == Guid.Empty) {
+                    var res = await Http.PostAsJsonAsync("api/assets/types", item);
+                    if (res.IsSuccessStatusCode) {
+                        var created = await res.Content.ReadFromJsonAsync<AssetType>();
+                        if (created != null) item.Id = created.Id;
+                        Snackbar.Add($"Kategorie '{item.Name}' erstellt.", Severity.Success);
+                    }
+                } else {
+                    await Http.PutAsJsonAsync($"api/assets/types/{item.Id}", item);
+                    Snackbar.Add($"Kategorie '{item.Name}' aktualisiert.", Severity.Success);
+                }
+            } catch { Snackbar.Add("Fehler.", Severity.Error); }
+        }
+    }
+
+    private async Task DeleteAssetTypeAsync(AssetType item) {
+        if (item.Id == Guid.Empty) { _dynamicAssetTypes.Remove(item); return; }
+        try {
+            var res = await Http.DeleteAsync($"api/assets/types/{item.Id}");
+            if (res.IsSuccessStatusCode) { _dynamicAssetTypes.Remove(item); Snackbar.Add("Gelöscht.", Severity.Success); }
+            else { Snackbar.Add("Kategorie wird noch verwendet.", Severity.Warning); }
+        } catch { }
+    }
+
+    private void AddAssetType() => _dynamicAssetTypes.Insert(0, new AssetType { Name = "Neu", IconKey = "Computer" });
+
     private async Task CheckForUpdates()
     {
         if (_isChecking) return;
@@ -367,12 +461,11 @@
     private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new(); _lifecycleConfig[g].Add("NEU"); OnFieldChanged(); }
 
     private string GetDynamicIcon(string? iconName) {
-        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Computer;
         try {
-            var field = typeof(Icons.Material.Filled).GetField(iconName);
-            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
-        } catch {}
-        return Icons.Material.Filled.Label;
+            var field = typeof(Icons.Material.Filled).GetField(iconName ?? "");
+            return field?.GetValue(null)?.ToString() ?? Icons.Material.Filled.Computer;
+        } catch { return Icons.Material.Filled.Computer; }
     }
 
     private string GetTagPreview() => (_masterData.AssetTagPattern ?? "{COMP}-{LOC}-{CAT}-{NUM:5}")
@@ -383,6 +476,7 @@
             case "Brother DK-11201 (29x90mm)": _masterData.LabelWidth = 90; _masterData.LabelHeight = 29; break;
             case "Brother DK-11209 (29x62mm)": _masterData.LabelWidth = 62; _masterData.LabelHeight = 29; break;
             case "Zebra Desktop 4x2 (102x51mm)": _masterData.LabelWidth = 102; _masterData.LabelHeight = 51; break;
+            case "Avery Zweckform 70x37mm": _masterData.LabelWidth = 70; _masterData.LabelHeight = 37; break;
         }
         StateHasChanged();
     }
@@ -413,19 +507,19 @@
         public string Country { get; set; } = "";
         public string TimeZoneId { get; set; } = "W. Europe Standard Time";
         public string AssetTagPattern { get; set; } = "{COMP}-{LOC}-{CAT}-{NUM:5}";
-        public string BarcodeType { get; set; } = "Code128";
-        public bool ShowTextBelowBarcode { get; set; } = true;
-        public string QrErrorCorrection { get; set; } = "M"; 
         public int LabelWidth { get; set; } = 50; 
         public int LabelHeight { get; set; } = 30; 
         public string LabelTemplate { get; set; } = "Custom";
-        public bool IncludeLogoInQr { get; set; } = false;
-        public bool PrintAssetName { get; set; } = true;
-        public bool PrintCompanyName { get; set; } = true;
-        public bool PrintSerialNumber { get; set; } = false;
-        public int PrintResolutionDpi { get; set; } = 300;
         public string TicketDefaultFilter { get; set; } = "Alle";
         public bool TicketShowClosed { get; set; } = false;
+        public bool PrintCompanyName { get; set; } = true;
+        public bool ShowTextBelowBarcode { get; set; } = true;
+        public bool PrintAssetName { get; set; } = true;
+        public bool PrintSerialNumber { get; set; } = false;
+        public int PrintResolutionDpi { get; set; } = 300;
+        public string BarcodeType { get; set; } = "Code128";
+        public string QrErrorCorrection { get; set; } = "M";
+        public bool IncludeLogoInQr { get; set; } = false;
         public List<TicketStatusItem> TicketStatusList { get; set; } = new();
         public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }

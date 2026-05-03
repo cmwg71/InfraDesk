@@ -3,10 +3,12 @@
 @using InfraDesk.Core.Entities
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
+@using System.Text
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using System.Security.Claims
 @using System.IO
+@using System.Text.RegularExpressions
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -22,7 +24,7 @@
 
 <style>
     .pdq-container { background-color: #f4f4f4; height: calc(100vh - 120px); display: flex; flex-direction: row; overflow: hidden; }
-    .pdq-main { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px; }
+    .pdq-main { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px; padding-bottom: 60px; }
     .pdq-sidebar { width: 400px; border-left: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; padding-bottom: 80px; }
     .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 8px; }
     
@@ -41,6 +43,18 @@
     .text-danger { color: var(--mud-palette-error); font-weight: bold; }
     .dirty-indicator { font-size: 0.75rem; color: var(--mud-palette-warning); font-weight: bold; margin-right: 12px; display: flex; align-items: center; }
     .mail-notice-box { border: 1px solid #ccc; padding: 10px; border-radius: 2px; background: #fff; margin-bottom: 12px; display: flex; align-items: center; font-size: 0.8rem; font-weight: bold; }
+
+    /* Drag & Drop File Upload Zone */
+    .file-dropzone-container { position: relative; border: 1px solid #e0e0e0; border-radius: 4px; padding: 20px 24px; background-color: #f8f9fa; text-align: left; transition: all 0.2s ease-in-out; width: 100%; overflow: hidden; }
+    .file-dropzone-container:hover, .file-dropzone-container.drag-active { border-color: var(--mud-palette-primary); background-color: #f0f4f8; }
+    .file-dropzone-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 10; }
+    .file-dropzone-title { margin: 0 0 6px 0; font-size: 1.35rem; font-weight: 400; color: #222; }
+    .file-dropzone-subtitle { margin: 0; font-size: 0.9rem; color: #555; }
+
+    /* Inline Rich Text Editor */
+    .rich-editor { min-height: 120px; max-height: 400px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 12px; background-color: #fff; font-family: Roboto, sans-serif; font-size: 0.875rem; color: #333; outline: none; transition: border-color 0.2s; line-height: 1.5; }
+    .rich-editor:focus { border-color: var(--mud-palette-primary); box-shadow: 0 0 0 1px var(--mud-palette-primary); }
+    .rich-editor:empty:not(:focus):before { content: attr(data-placeholder); color: #999; pointer-events: none; }
 </style>
 
 @if (_ticket == null) {
@@ -107,7 +121,6 @@
                 <div class="pa-4">
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="4">
-                            <!-- DYNAMISCHES STATUS DROPDOWN -->
                             <MudSelect T="string" Label="Status" @bind-Value="_ticket.Status" @bind-Value:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
                                 @foreach (var s in _ticketStatuses) {
                                     <MudSelectItem Value="@s.Name">
@@ -117,7 +130,6 @@
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="4">
-                            <!-- DYNAMISCHES PRIORITÄTEN DROPDOWN -->
                             <MudSelect T="string" Label="Priorität" @bind-Value="_ticket.Priority" @bind-Value:after="OnFieldChanged" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
                                 @foreach (var p in _ticketPriorities) {
                                     <MudSelectItem Value="@p.Name">
@@ -185,16 +197,26 @@
                 </MudText>
                 
                 <div id="ticket-comment-wrapper">
-                    <MudTextField T="string" @bind-Value="_newComment" Placeholder="Ihre Bearbeitungsschritte dokumentieren..." Lines="4" Variant="Variant.Outlined" Margin="Margin.Dense" BackgroundColor="#fff" />
+                    <!-- Leere Hülle: Isoliert das JS vom Blazor Virtual DOM -->
+                    <div id="ticket-comment-container" data-placeholder="Ihre Bearbeitungsschritte dokumentieren..."></div>
                 </div>
                 
-                <div class="d-flex justify-end mt-2 align-center">
-                    <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadFiles" MaximumFileCount="10" Class="mr-auto mt-0">
-                        <ActivatorContent>
-                            <MudButton StartIcon="@Icons.Material.Filled.AttachFile" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default">Anhang hinzufügen</MudButton>
-                        </ActivatorContent>
-                    </MudFileUpload>
-
+                <div class="mt-3">
+                    <div class="file-dropzone-container @(_dragActive ? "drag-active" : "")"
+                         @ondragenter="@(() => _dragActive = true)"
+                         @ondragleave="@(() => _dragActive = false)"
+                         @ondrop="@(() => _dragActive = false)"
+                         ondragover="event.preventDefault();">
+                        
+                        <InputFile id="hidden-file-input" OnChange="UploadFiles" multiple class="file-dropzone-input" />
+                        
+                        <h4 class="file-dropzone-title">Dokumente hinzufügen</h4>
+                        <p class="file-dropzone-subtitle">Dateien zum Upload (auch mehrere) hier hereinziehen oder klicken zur Dateiauswahl</p>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-end mt-3 align-center">
+                    <MudSpacer />
                     <MudNumericField T="int" @bind-Value="_newCommentMinutes" Label="Aufwand (Minuten)" Margin="Margin.Dense" Variant="Variant.Outlined" Style="width: 120px;" Class="mr-4" />
                     <MudCheckBox T="bool" @bind-Value="_commentIsPublic" Label="Öffentlich (E-Mail an CC)" Dense="true" Size="Size.Small" Class="mr-4" />
                     
@@ -202,46 +224,59 @@
                         <MudText Typo="Typo.caption" Color="Color.Info" Class="mr-4"><i>(Wird auf @_ticket.ChildTickets.Count Sub-Tickets kopiert)</i></MudText>
                     }
 
-                    <MudButton StartIcon="@Icons.Material.Filled.Send" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddCommentAndNotify">Nachricht senden</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Send" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddCommentAndNotify" Disabled="@(!_hasDescription)">Nachricht senden</MudButton>
                 </div>
             </MudPaper>
 
-            <div class="d-flex align-center mb-3">
+            <div class="d-flex align-center mb-4 mt-6">
                 <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="mr-2" Color="Color.Secondary" />
                 <MudText Typo="Typo.body2" Class="font-weight-bold">Bearbeitungsverlauf (Journal)</MudText>
                 <MudSpacer />
-                <MudToggleIconButton @bind-Toggled="_showPrivateNotes" Icon="@Icons.Material.Filled.Visibility" ToggledIcon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" />
+                <MudToggleIconButton @bind-Toggled="_showPrivateNotes" Icon="@Icons.Material.Filled.Visibility" ToggledIcon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" Title="Interne Notizen umschalten" />
             </div>
 
-            @if (_ticket.Activities != null)
-            {
-                @foreach (var act in _ticket.Activities.OrderByDescending(a => a.Timestamp)) {
-                    bool isInternal = !act.IsPublic;
-                    if (isInternal && (!_isAgent || !_showPrivateNotes)) continue;
+            <!-- NULL-SAFE RENDERING BLOCK FÜR DEN VERLAUF -->
+            <div class="d-flex flex-column gap-3 mb-6">
+                @if (_ticket.Activities != null && _ticket.Activities.Any())
+                {
+                    @foreach (var act in _ticket.Activities.Where(a => a != null).OrderByDescending(a => a.Timestamp)) 
+                    {
+                        bool isInternal = !act.IsPublic;
+                        if (isInternal && (!_isAgent || !_showPrivateNotes)) continue;
 
-                    <div class="activity-card @(act.IsStaffAction ? "activity-agent" : "") @(isInternal ? "internal-card" : "")">
-                        <div class="activity-header">
-                            <div class="header-meta">
-                                <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" /> @ThemeService.FormatDate(act.Timestamp)</span>
-                                <span class="meta-item">
-                                    <MudAvatar Size="Size.Small" Color="@(act.IsStaffAction ? Color.Primary : Color.Info)" Style="width:18px; height:18px; font-size: 0.6rem;">@(string.IsNullOrEmpty(act.AuthorName) ? "?" : act.AuthorName.Substring(0,1))</MudAvatar> 
-                                    <strong>@act.AuthorName</strong>
-                                </span>
-                                @if (act.ActivitySpentMinutes > 0) { <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" /> @act.ActivitySpentMinutes Min</span> }
-                                
-                                @if (!isInternal) {
-                                    <MudTooltip>
-                                        <ChildContent><MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Color="Color.Success" /></ChildContent>
-                                        <TooltipContent><MudText Typo="Typo.caption">Empfänger informiert</MudText></TooltipContent>
-                                    </MudTooltip>
-                                }
+                        <div class="activity-card @(act.IsStaffAction ? "activity-agent" : "") @(isInternal ? "internal-card" : "")">
+                            <div class="activity-header">
+                                <div class="header-meta">
+                                    <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" /> @ThemeService.FormatDate(act.Timestamp)</span>
+                                    <span class="meta-item">
+                                        <MudAvatar Size="Size.Small" Color="@(act.IsStaffAction ? Color.Primary : Color.Info)" Style="width:20px; height:20px; font-size: 0.65rem;">
+                                            @(string.IsNullOrWhiteSpace(act.AuthorName) ? "?" : act.AuthorName.Substring(0,1).ToUpper())
+                                        </MudAvatar> 
+                                        <strong>@(string.IsNullOrWhiteSpace(act.AuthorName) ? "Unbekannt" : act.AuthorName)</strong>
+                                    </span>
+                                    @if (act.ActivitySpentMinutes > 0) { <span class="meta-item"><MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" /> @act.ActivitySpentMinutes Min</span> }
+                                    
+                                    @if (!isInternal) {
+                                        <MudTooltip>
+                                            <ChildContent><MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Color="Color.Success" /></ChildContent>
+                                            <TooltipContent><MudText Typo="Typo.caption">Empfänger informiert</MudText></TooltipContent>
+                                        </MudTooltip>
+                                    }
+                                </div>
+                                @if(isInternal) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Class="font-weight-bold pa-0 ma-0">INTERN</MudChip> }
                             </div>
-                            @if(isInternal) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Class="font-weight-bold pa-0 ma-0">INTERN</MudChip> }
+                            <div class="pa-4" style="font-size: 0.85rem; color: #333; overflow-wrap: break-word; line-height: 1.5;">
+                                <!-- Sicherer Cast: Verhindert Absturz wenn Content NULL in der DB steht -->
+                                @((MarkupString)(act.Content ?? ""))
+                            </div>
                         </div>
-                        <div class="pa-4" style="font-size: 0.82rem; color: #444; overflow-wrap: break-word;">@((MarkupString)act.Content)</div>
-                    </div>
+                    }
                 }
-            }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">Es sind noch keine Journaleinträge für dieses Ticket vorhanden.</MudAlert>
+                }
+            </div>
         </div>
 
         <div class="pdq-sidebar">
@@ -414,6 +449,37 @@
                     </ChildContent>
                 </MudExpansionPanel>
 
+                <MudExpansionPanel IsExpanded="true">
+                    <TitleContent>
+                        <div class="d-flex align-center justify-space-between w-100 pr-4">
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" Class="mr-2"/>
+                                <span class="sidebar-panel-header">Dateianhänge</span>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Class="font-weight-bold ma-0">
+                                @(_attachments.Count)
+                            </MudChip>
+                        </div>
+                    </TitleContent>
+                    <ChildContent>
+                        @if (_attachments.Any()) {
+                            <MudList T="ExtractedFile" Dense="true" Class="pa-0">
+                                @foreach(var file in _attachments) {
+                                    <MudListItem T="ExtractedFile" Class="px-0">
+                                        <div class="d-flex align-center w-100" @ondblclick="@(() => OpenAttachment(file))" style="cursor: pointer; padding: 4px;" title="Doppelklick zum Herunterladen/Öffnen">
+                                            <MudIcon Icon="@(file.IsImage ? Icons.Material.Filled.Image : Icons.Material.Filled.InsertDriveFile)" Size="Size.Small" Class="mr-3" Color="Color.Primary" />
+                                            <MudText Typo="Typo.caption" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; width: 280px;">@file.Name</MudText>
+                                        </div>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block text-center"><i>Doppelklick zum Öffnen/Herunterladen</i></MudText>
+                        } else {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Keine Dateien angehängt.</MudText>
+                        }
+                    </ChildContent>
+                </MudExpansionPanel>
+
             </MudExpansionPanels>
         </div>
     </div>
@@ -438,6 +504,8 @@
     private bool _isLoading = true;
     private bool _isAgent = false;
     private bool _hasUnsavedChanges = false;
+    private bool _dragActive = false;
+    private bool _hasDescription = false;
     private DateTime? _dueAt;
     
     // DIE NEUEN STRUKTUREN
@@ -452,8 +520,24 @@
         public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }
 
+    public class ExtractedFile
+    {
+        public string Name { get; set; } = "";
+        public string DataUri { get; set; } = "";
+        public bool IsImage { get; set; }
+    }
+    
+    private List<ExtractedFile> _attachments = new();
+
     private DotNetObjectReference<TicketDetails>? _objRef;
-    private static readonly JsonSerializerOptions _jsonOptions = new() { ReferenceHandler = ReferenceHandler.IgnoreCycles, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    private Dictionary<string, StringBuilder> _htmlChunks = new();
+    
+    // INFO: Ohne PropertyNameCaseInsensitive kann das Setup nach Deserialize keine Activities aus dem UpdateSnapshot lesen.
+    private static readonly JsonSerializerOptions _jsonOptions = new() { 
+        ReferenceHandler = ReferenceHandler.IgnoreCycles, 
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNameCaseInsensitive = true 
+    };
 
     public Ticket? SelectedMasterTicket {
         get => _ticket?.MasterTicketId.HasValue == true ? _allTickets.FirstOrDefault(t => t.Id == _ticket.MasterTicketId) : null;
@@ -498,9 +582,96 @@
                 if (!_ticketPriorities.Any()) _ticketPriorities.Add(new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" });
 
                 await LoadRequesterAssets();
+                ExtractAttachments();
             }
         } catch (Exception ex) { Snackbar.Add($"Fehler beim Laden: {ex.Message}", Severity.Error); }
         finally { _isLoading = false; }
+    }
+
+    private void ExtractAttachments()
+    {
+        _attachments.Clear();
+        if (_ticket == null) return;
+
+        var allHtml = (_ticket.Description ?? "") + " " + string.Join(" ", _ticket.Activities.Select(a => a.Content ?? ""));
+
+        int imgSearchIndex = 0;
+        int imgCounter = 1;
+        while ((imgSearchIndex = allHtml.IndexOf("<img", imgSearchIndex, StringComparison.OrdinalIgnoreCase)) != -1)
+        {
+            int srcStart = allHtml.IndexOf("src=\"", imgSearchIndex, StringComparison.OrdinalIgnoreCase);
+            if (srcStart != -1)
+            {
+                srcStart += 5;
+                int srcEnd = allHtml.IndexOf("\"", srcStart);
+                if (srcEnd != -1)
+                {
+                    string src = allHtml.Substring(srcStart, srcEnd - srcStart);
+                    if (src.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && src.Contains(";base64,"))
+                    {
+                        if (!_attachments.Any(a => a.DataUri == src))
+                        {
+                            string ext = "png";
+                            int mimeEnd = src.IndexOf(";");
+                            if (mimeEnd > 11) ext = src.Substring(11, mimeEnd - 11);
+
+                            _attachments.Add(new ExtractedFile { 
+                                DataUri = src, 
+                                Name = $"Eingefügtes_Bild_{imgCounter}.{ext}", 
+                                IsImage = true 
+                            });
+                            imgCounter++;
+                        }
+                    }
+                }
+            }
+            imgSearchIndex += 4;
+        }
+
+        int aSearchIndex = 0;
+        while ((aSearchIndex = allHtml.IndexOf("<a ", aSearchIndex, StringComparison.OrdinalIgnoreCase)) != -1)
+        {
+            int hrefStart = allHtml.IndexOf("href=\"", aSearchIndex, StringComparison.OrdinalIgnoreCase);
+            if (hrefStart != -1)
+            {
+                hrefStart += 6;
+                int hrefEnd = allHtml.IndexOf("\"", hrefStart);
+                if (hrefEnd != -1)
+                {
+                    string href = allHtml.Substring(hrefStart, hrefEnd - hrefStart);
+                    if (href.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && href.Contains(";base64,"))
+                    {
+                        int downloadStart = allHtml.IndexOf("download=\"", aSearchIndex, StringComparison.OrdinalIgnoreCase);
+                        string fileName = "download";
+                        
+                        if (downloadStart != -1 && downloadStart < hrefStart + href.Length + 100)
+                        {
+                            downloadStart += 10;
+                            int downloadEnd = allHtml.IndexOf("\"", downloadStart);
+                            if (downloadEnd != -1)
+                            {
+                                fileName = allHtml.Substring(downloadStart, downloadEnd - downloadStart);
+                            }
+                        }
+
+                        if (!_attachments.Any(a => a.DataUri == href))
+                        {
+                            _attachments.Add(new ExtractedFile { 
+                                DataUri = href, 
+                                Name = fileName, 
+                                IsImage = false 
+                            });
+                        }
+                    }
+                }
+            }
+            aSearchIndex += 3;
+        }
+    }
+
+    private async Task OpenAttachment(ExtractedFile file)
+    {
+        await JSRuntime.InvokeVoidAsync("openBase64File", file.DataUri, file.Name);
     }
 
     private string GetDynamicIcon(string? iconName) {
@@ -514,29 +685,189 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender) {
         if (firstRender) {
-            var js = "window.attachImagePasteListener = function(wrapperId, dotNetRef) { var wrapper = document.getElementById(wrapperId); if(!wrapper) return; var el = wrapper.querySelector('textarea') || wrapper.querySelector('input'); if(el && !el.dataset.pasteAttached) { el.dataset.pasteAttached = 'true'; el.addEventListener('paste', function(e) { var clipboardData = e.clipboardData || window.clipboardData; if (!clipboardData) return; var items = clipboardData.items; for (var i = 0; i < items.length; i++) { if (items[i].type.indexOf('image') !== -1) { e.preventDefault(); var blob = items[i].getAsFile(); var reader = new FileReader(); reader.onload = function(event) { dotNetRef.invokeMethodAsync('HandleImagePasted', event.target.result); }; reader.readAsDataURL(blob); break; } } }); } };";
+            var js = @"
+                window.initRichEditor = function(containerId, dotNetRef, initialHtml) { 
+                    var container = document.getElementById(containerId); 
+                    if(!container) return;
+                    
+                    if(container.dataset.initialized) return; 
+                    container.dataset.initialized = 'true'; 
+                    
+                    var editor = document.createElement('div');
+                    editor.id = containerId + '-inner';
+                    editor.className = 'rich-editor';
+                    editor.contentEditable = 'true';
+                    editor.setAttribute('data-placeholder', container.getAttribute('data-placeholder') || 'Bitte tippen...');
+                    editor.innerHTML = initialHtml || '';
+                    
+                    container.appendChild(editor);
+                    
+                    editor.addEventListener('input', function() { 
+                        var hasText = editor.innerText.trim().length > 0 || editor.querySelectorAll('img, a').length > 0;
+                        if (editor.dataset.hasText !== String(hasText)) {
+                            editor.dataset.hasText = String(hasText);
+                            dotNetRef.invokeMethodAsync('SetHasDescription', hasText); 
+                        }
+                    }); 
+                    
+                    editor.addEventListener('paste', function(e) { 
+                        var clipboardData = e.clipboardData || window.clipboardData; 
+                        if (!clipboardData) return; 
+                        var items = clipboardData.items; 
+                        for (var i = 0; i < items.length; i++) { 
+                            if (items[i].type.indexOf('image') !== -1) { 
+                                e.preventDefault(); 
+                                var blob = items[i].getAsFile(); 
+                                var dt = new DataTransfer();
+                                dt.items.add(blob);
+                                var input = document.getElementById('hidden-file-input');
+                                if (input) {
+                                    input.files = dt.files;
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                                break; 
+                            } 
+                        } 
+                    }); 
+                };
+                
+                window.appendRichEditor = function(containerId, htmlContent) {
+                    var editor = document.getElementById(containerId + '-inner');
+                    if(editor) {
+                        editor.focus();
+                        if (typeof window.getSelection !== 'undefined' && typeof document.createRange !== 'undefined') {
+                            var range = document.createRange();
+                            range.selectNodeContents(editor);
+                            range.collapse(false);
+                            var sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        }
+                        document.execCommand('insertHTML', false, htmlContent);
+                        editor.dispatchEvent(new Event('input'));
+                    }
+                };
+
+                window.syncEditorContent = async function(containerId, dotNetRef, callbackMethod) {
+                    var editor = document.getElementById(containerId + '-inner');
+                    if(!editor) {
+                        await dotNetRef.invokeMethodAsync(callbackMethod, """");
+                        return;
+                    }
+
+                    var html = editor.innerHTML;
+                    const chunkSize = 20000;
+                    const totalChunks = Math.ceil(html.length / chunkSize);
+                    let sessionId = Math.random().toString(36).substring(2);
+
+                    if (totalChunks === 0) {
+                        await dotNetRef.invokeMethodAsync('ReceiveChunk', sessionId, """", 0, 1);
+                    } else {
+                        for (let i = 0; i < totalChunks; i++) {
+                            let chunk = html.substring(i * chunkSize, (i + 1) * chunkSize);
+                            await dotNetRef.invokeMethodAsync('ReceiveChunk', sessionId, chunk, i, totalChunks);
+                        }
+                    }
+                    await dotNetRef.invokeMethodAsync(callbackMethod, sessionId);
+                };
+                
+                window.clearRichEditor = function(containerId) {
+                    var editor = document.getElementById(containerId + '-inner');
+                    if(editor) { editor.innerHTML = ''; editor.dispatchEvent(new Event('input')); }
+                };
+
+                window.openBase64File = function(dataUri, fileName) {
+                    var link = document.createElement('a');
+                    link.href = dataUri;
+                    link.download = fileName || 'download';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                };
+            ";
             await JSRuntime.InvokeVoidAsync("eval", js);
             _objRef = DotNetObjectReference.Create(this);
         }
-        if (!_isLoading && _ticket != null) await JSRuntime.InvokeVoidAsync("attachImagePasteListener", "ticket-comment-wrapper", _objRef);
+        
+        if (!_isLoading && _ticket != null) {
+            await JSRuntime.InvokeVoidAsync("initRichEditor", "ticket-comment-container", _objRef, "");
+        }
     }
 
     [JSInvokable]
-    public void HandleImagePasted(string base64Image) {
-        _newComment += $"\n<br/><img src=\"{base64Image}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
-        Snackbar.Add("Bild aus Zwischenablage eingefügt.", Severity.Success);
-        StateHasChanged();
+    public void SetHasDescription(bool hasContent)
+    {
+        if (_hasDescription != hasContent)
+        {
+            _hasDescription = hasContent;
+            StateHasChanged();
+        }
     }
 
-    private async Task UploadFiles(IReadOnlyList<IBrowserFile> files) {
+    [JSInvokable]
+    public void ReceiveChunk(string sessionId, string chunk, int index, int total)
+    {
+        if (!_htmlChunks.ContainsKey(sessionId)) _htmlChunks[sessionId] = new StringBuilder();
+        _htmlChunks[sessionId].Append(chunk);
+    }
+
+    [JSInvokable]
+    public async Task ProcessCommentAndProceed(string sessionId)
+    {
+        if (_htmlChunks.TryGetValue(sessionId, out var sb))
+        {
+            _newComment = sb.ToString();
+            _htmlChunks.Remove(sessionId);
+        }
+        else
+        {
+            _newComment = "";
+        }
+
+        if (string.IsNullOrWhiteSpace(_newComment) || _newComment == "<br>") return;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userName = authState.User.Identity?.Name ?? "Agent";
+        
+        _ticket!.Activities.Add(new TicketActivity { 
+            Id = Guid.NewGuid(), 
+            TicketId = _ticket.Id, 
+            AuthorName = userName, 
+            Content = _newComment, 
+            Timestamp = DateTime.UtcNow, 
+            IsPublic = _commentIsPublic, 
+            IsStaffAction = true, 
+            Type = "Comment", 
+            ActivitySpentMinutes = _newCommentMinutes 
+        });
+        
+        _ticket.SpentMinutes += _newCommentMinutes; 
+        _newComment = ""; 
+        _newCommentMinutes = 0;
+        _hasDescription = false;
+        
+        await SaveTicketWithLogging(isNewComment: true);
+        await JSRuntime.InvokeVoidAsync("clearRichEditor", "ticket-comment-container");
+    }
+
+    private async Task UploadFiles(InputFileChangeEventArgs e) {
+        var files = e.GetMultipleFiles(10);
         foreach (var file in files) {
             try {
-                using var stream = file.OpenReadStream(10 * 1024 * 1024);
+                var maxAllowedSize = 10 * 1024 * 1024;
+                using var stream = file.OpenReadStream(maxAllowedSize);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms);
                 var base64 = Convert.ToBase64String(ms.ToArray());
-                if (file.ContentType.StartsWith("image/")) _newComment += $"\n<br/><img src=\"data:{file.ContentType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
-                else _newComment += $"\n<br/><a href=\"data:{file.ContentType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>\n";
+                string appendHtml = "";
+                
+                if (file.ContentType.StartsWith("image/")) 
+                    appendHtml = $"<br/><img src=\"data:{file.ContentType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0; display: block;\" /><br/>";
+                else 
+                    appendHtml = $"<br/><a href=\"data:{file.ContentType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>";
+                
+                await JSRuntime.InvokeVoidAsync("appendRichEditor", "ticket-comment-container", appendHtml);
+                SetHasDescription(true);
                 Snackbar.Add($"{file.Name} angehängt.", Severity.Success);
             } catch (Exception ex) { Snackbar.Add($"Fehler bei {file.Name}: {ex.Message}", Severity.Error); }
         }
@@ -551,19 +882,22 @@
     }
 
     private async Task LoadRequesterAssets() { if (_ticket?.RequesterId.HasValue == true && _allAssets.Any()) _requesterAssets = _allAssets.Where(a => a.OwnerId == _ticket.RequesterId).ToList(); }
-    private void UpdateSnapshot() { if (_ticket != null) { var json = JsonSerializer.Serialize(_ticket, _jsonOptions); _originalTicket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions); } }
+    
+    private void UpdateSnapshot() { 
+        if (_ticket != null) { 
+            var json = JsonSerializer.Serialize(_ticket, _jsonOptions); 
+            _originalTicket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions); 
+        } 
+    }
+    
     private void OnFieldChanged() => _hasUnsavedChanges = true;
     private void DiscardChanges() { if (_originalTicket != null) { var json = JsonSerializer.Serialize(_originalTicket, _jsonOptions); _ticket = JsonSerializer.Deserialize<Ticket>(json, _jsonOptions); _dueAt = _ticket?.DueAt; _hasUnsavedChanges = false; Snackbar.Add("Änderungen verworfen.", Severity.Info); } }
     private async Task OnBeforeInternalNavigation(LocationChangingContext context) { if (_hasUnsavedChanges) { bool? result = await DialogService.ShowMessageBoxAsync("Ungespeicherte Änderungen", "Nicht gespeicherte Daten gehen verloren. Seite wirklich verlassen?", yesText: "Verlassen", cancelText: "Bleiben"); if (result == null || result == false) context.PreventNavigation(); } }
     private void NavigateBack() => Nav.NavigateTo("/tickets");
 
     private async Task AddCommentAndNotify() {
-        if (string.IsNullOrWhiteSpace(_newComment)) return;
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userName = authState.User.Identity?.Name ?? "Agent";
-        _ticket!.Activities.Add(new TicketActivity { Id = Guid.NewGuid(), TicketId = _ticket.Id, AuthorName = userName, Content = _newComment, Timestamp = DateTime.UtcNow, IsPublic = _commentIsPublic, IsStaffAction = true, Type = "Comment", ActivitySpentMinutes = _newCommentMinutes });
-        _ticket.SpentMinutes += _newCommentMinutes; _newComment = ""; _newCommentMinutes = 0;
-        await SaveTicketWithLogging(isNewComment: true);
+        if (!_hasDescription) return;
+        await JSRuntime.InvokeVoidAsync("syncEditorContent", "ticket-comment-container", _objRef, "ProcessCommentAndProceed");
     }
 
     private async Task<bool> SaveTicketWithLogging(bool isNewComment = false) {
@@ -596,7 +930,13 @@
                 foreach(var act in newActivities) _ticket.Activities.Add(act);
             }
             var res = await Http.PutAsJsonAsync($"api/tickets/{_ticket.Id}", _ticket, _jsonOptions);
-            if (res.IsSuccessStatusCode) { UpdateSnapshot(); _hasUnsavedChanges = false; Snackbar.Add("Gespeichert.", Severity.Success); return true; }
+            if (res.IsSuccessStatusCode) { 
+                UpdateSnapshot(); 
+                _hasUnsavedChanges = false; 
+                ExtractAttachments(); 
+                Snackbar.Add("Gespeichert.", Severity.Success); 
+                return true; 
+            }
             else { 
                 foreach(var act in newActivities) _ticket.Activities.Remove(act);
                 Snackbar.Add("API-Fehler beim Speichern.", Severity.Error); return false; 

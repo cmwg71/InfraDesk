@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using InfraDesk.Infrastructure.Persistence;
 using InfraDesk.Core.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace InfraDesk.API.Controllers;
 
@@ -31,7 +35,8 @@ public class AssetsController : ControllerBase
             .ToListAsync();
     }
 
-    [HttpGet("{id}")]
+    // FIX: Routen-Constraint :guid hinzugefügt, damit /api/assets/types hier nicht matcht!
+    [HttpGet("{id:guid}")]
     public async Task<ActionResult<Asset>> GetAsset(Guid id)
     {
         var asset = await _context.Assets
@@ -47,13 +52,9 @@ public class AssetsController : ControllerBase
         return asset;
     }
 
-    [HttpGet("types")]
-    public async Task<ActionResult<IEnumerable<AssetType>>> GetAssetTypes()
-    {
-        return await _context.AssetTypes.OrderBy(t => t.Name).ToListAsync();
-    }
+    // ACHTUNG: Die Methode GetAssetTypes() wurde entfernt, da diese nun exklusiv vom 
+    // neuen AssetTypesController unter /api/assets/types verwaltet wird!
 
-    // NEU: Automatischer Generator für garantiert eindeutige Asset Tags
     [HttpGet("generate-tag")]
     public async Task<ActionResult<string>> GenerateTag([FromQuery] string company, [FromQuery] Guid? locationId, [FromQuery] Guid? typeId)
     {
@@ -82,12 +83,12 @@ public class AssetsController : ControllerBase
 
         // 4. Garantiert eindeutige Nummer ermitteln (Datenbank-Lock Logik simuliert)
         var lastAsset = await _context.Assets
-            .Where(a => a.AssetTag.StartsWith(prefix))
+            .Where(a => a.AssetTag != null && a.AssetTag.StartsWith(prefix))
             .OrderByDescending(a => a.AssetTag)
             .FirstOrDefaultAsync();
 
         int nextNum = 1;
-        if (lastAsset != null)
+        if (lastAsset != null && lastAsset.AssetTag != null)
         {
             var parts = lastAsset.AssetTag.Split('-');
             if (parts.Length == 4 && int.TryParse(parts[3], out int parsedNum))
@@ -114,7 +115,6 @@ public class AssetsController : ControllerBase
         asset.Location = null;
         asset.Owner = null;
 
-        // Sicherheitsprüfung: Ist der Tag wirklich eindeutig?
         if (await _context.Assets.AnyAsync(a => a.AssetTag == asset.AssetTag))
         {
             return BadRequest("Kollision: Dieses Asset-Tag existiert bereits. Bitte Formular aktualisieren.");
@@ -137,7 +137,8 @@ public class AssetsController : ControllerBase
         return CreatedAtAction(nameof(GetAsset), new { id = asset.Id }, asset);
     }
 
-    [HttpPut("{id}")]
+    // FIX: Ebenfalls Routen-Constraint eingefügt
+    [HttpPut("{id:guid}")]
     public async Task<IActionResult> PutAsset(Guid id, Asset asset)
     {
         if (id != asset.Id) return BadRequest("ID Mismatch");

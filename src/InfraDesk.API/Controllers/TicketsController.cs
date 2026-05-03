@@ -52,13 +52,12 @@ public class TicketsController : ControllerBase
         return ticket;
     }
 
-    // NEU: Liefert die neusten echten Journal-Einträge für das Dashboard
     [HttpGet("recent-activities")]
     public async Task<ActionResult<IEnumerable<object>>> GetRecentActivities()
     {
         var activities = await _context.TicketActivities
             .OrderByDescending(a => a.Timestamp)
-            .Where(a => a.IsPublic) // Nur öffentliche/sichtbare für das Dashboard
+            .Where(a => a.IsPublic)
             .Take(15)
             .Join(_context.Tickets, a => a.TicketId, t => t.Id, (a, t) => new {
                 TicketId = a.TicketId,
@@ -91,6 +90,7 @@ public class TicketsController : ControllerBase
         ticket.Requester = null;
         ticket.Supporter = null;
         ticket.Approver = null;
+        ticket.MasterTicket = null;
 
         var assignedAssets = new List<Asset>();
         if (ticket.AssignedAssets != null)
@@ -102,6 +102,18 @@ public class TicketsController : ControllerBase
             }
         }
         ticket.AssignedAssets = assignedAssets;
+
+        // FIX für PK_Persons Fehler: Watchers sicher an den Kontext binden
+        var assignedWatchers = new List<Person>();
+        if (ticket.Watchers != null)
+        {
+            foreach (var w in ticket.Watchers)
+            {
+                var trackedPerson = await _context.Persons.FindAsync(w.Id);
+                if (trackedPerson != null) assignedWatchers.Add(trackedPerson);
+            }
+        }
+        ticket.Watchers = assignedWatchers;
 
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
@@ -162,7 +174,7 @@ public class TicketsController : ControllerBase
             }
         }
 
-        // NEUE Aktivitäten (Journal) anfügen
+        // Aktivitäten (Journal) anfügen
         if (ticket.Activities != null)
         {
             foreach (var newAct in ticket.Activities.Where(a => a.Id != Guid.Empty && !_context.TicketActivities.Any(dbA => dbA.Id == a.Id)))

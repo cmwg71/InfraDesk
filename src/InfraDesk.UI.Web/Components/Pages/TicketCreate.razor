@@ -3,6 +3,7 @@
 @page "/tickets/edit/{Id:guid}"
 @using InfraDesk.Core.Entities
 @using MudBlazor
+@using System.Text
 @using System.Text.Json
 @using System.IO
 @inject HttpClient Http
@@ -27,6 +28,18 @@
     .wizard-step.active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
     .wizard-step.completed { color: var(--mud-palette-success); }
     .wizard-step:hover { background-color: #e6e6e6; }
+
+    /* Drag & Drop File Upload Zone */
+    .file-dropzone-container { position: relative; border: 1px solid #e0e0e0; border-radius: 4px; padding: 20px 24px; background-color: #f8f9fa; text-align: left; transition: all 0.2s ease-in-out; width: 100%; overflow: hidden; }
+    .file-dropzone-container:hover, .file-dropzone-container.drag-active { border-color: var(--mud-palette-primary); background-color: #f0f4f8; }
+    .file-dropzone-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 10; }
+    .file-dropzone-title { margin: 0 0 6px 0; font-size: 1.35rem; font-weight: 400; color: #222; }
+    .file-dropzone-subtitle { margin: 0; font-size: 0.9rem; color: #555; }
+
+    /* Inline Rich Text Editor */
+    .rich-editor { min-height: 120px; max-height: 400px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 12px; background-color: #fff; font-family: Roboto, sans-serif; font-size: 0.875rem; color: #333; outline: none; transition: border-color 0.2s; line-height: 1.5; }
+    .rich-editor:focus { border-color: var(--mud-palette-primary); box-shadow: 0 0 0 1px var(--mud-palette-primary); }
+    .rich-editor:empty:not(:focus):before { content: attr(data-placeholder); color: #999; pointer-events: none; }
 </style>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-8">
@@ -34,7 +47,7 @@
     <div class="pdq-toolbar">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/tickets"))" Size="Size.Small" Class="mr-2" />
         <MudIcon Icon="@Icons.Material.Filled.AddComment" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
-        <MudText Typo="Typo.body2" Class="font-weight-bold">Neues Ticket anlegen</MudText>
+        <MudText Typo="Typo.body2" Class="font-weight-bold">@(IsEditMode ? "Ticket bearbeiten" : "Neues Ticket anlegen")</MudText>
         
         <MudSpacer />
         
@@ -90,25 +103,26 @@
                         <MudItem xs="12">
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">
                                 <MudIcon Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                                Sie können Screenshots direkt mit Strg+V einfügen oder Dateien anhängen.
+                                Sie können Screenshots direkt mit Strg+V einfügen oder Dateien unten anhängen.
                             </MudText>
                             
                             <div id="ticket-desc-wrapper">
-                                <MudTextField @bind-Value="_newTicket.Description" 
-                                              Label="Beschreibung *" 
-                                              Placeholder="Bitte beschreiben Sie das Problem oder Ihre Anfrage hier so detailliert wie möglich..." 
-                                              Variant="Variant.Outlined" 
-                                              Margin="Margin.Dense" 
-                                              Required="true" 
-                                              Lines="10" />
+                                <!-- Leere Hülle: Isoliert das JS vom Blazor Virtual DOM, wodurch keine Abstürze mehr entstehen -->
+                                <div id="ticket-desc-container" data-placeholder="Bitte beschreiben Sie das Problem oder Ihre Anfrage hier so detailliert wie möglich..."></div>
                             </div>
                             
-                            <div class="mt-2">
-                                <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadFiles" MaximumFileCount="10">
-                                    <ActivatorContent>
-                                        <MudButton StartIcon="@Icons.Material.Filled.AttachFile" Variant="Variant.Outlined" Size="Size.Small">Dateien anhängen (PDF, Bilder...)</MudButton>
-                                    </ActivatorContent>
-                                </MudFileUpload>
+                            <div class="mt-3">
+                                <div class="file-dropzone-container @(_dragActive ? "drag-active" : "")"
+                                     @ondragenter="@(() => _dragActive = true)"
+                                     @ondragleave="@(() => _dragActive = false)"
+                                     @ondrop="@(() => _dragActive = false)"
+                                     ondragover="event.preventDefault();">
+                                    
+                                    <InputFile id="hidden-file-input" OnChange="UploadFiles" multiple class="file-dropzone-input" />
+                                    
+                                    <h4 class="file-dropzone-title">Dokumente hinzufügen</h4>
+                                    <p class="file-dropzone-subtitle">Dateien zum Upload (auch mehrere) hier hereinziehen oder klicken zur Dateiauswahl</p>
+                                </div>
                             </div>
                         </MudItem>
                     </MudGrid>
@@ -217,6 +231,65 @@
                         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">Bislang wurden keine Assets verknüpft.</MudAlert>
                     }
                 }
+
+                <!-- NEU: Der 4. Schritt für erweiterte Optionen direkt bei der Erstellung -->
+                @if (currentStepDef.Id == "Extended")
+                {
+                    <div class="pdq-section-header">4. Erweiterte Optionen (Optional)</div>
+                    <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Alle hier aufgeführten Felder sind optional und können auch später im Ticket gesetzt werden.</MudText>
+                    
+                    <MudGrid Spacing="2" Class="mb-6">
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Guid?" Label="Verantwortlicher Entscheider (Genehmigung)" @bind-Value="_newTicket.ApproverId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                @foreach(var p in _availablePersons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                        
+                        <MudItem xs="12" md="6">
+                            <MudAutocomplete T="Ticket" Label="Untergeordnet zu Master-Ticket..." @bind-Value="SelectedMasterTicket" 
+                                             SearchFunc="SearchTickets" ToStringFunc="@(t => t == null ? "" : $"#{t.TicketNumber} {t.Title}")" 
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                        </MudItem>
+                        
+                        <MudItem xs="12" md="6">
+                            <MudDatePicker Label="Fällig am (Due Date)" @bind-Date="_newTicket.DueAt" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                        </MudItem>
+                        
+                        <MudItem xs="12" md="6">
+                            <MudNumericField T="int" Label="Geschätzter Aufwand (Soll-Minuten)" @bind-Value="_newTicket.EstimatedMinutes" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <div class="d-flex align-center justify-space-between mb-2 mt-4 pa-4" style="border: 1px solid #ccc; border-radius: 4px;">
+                                <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Eskalationsstufe direkt setzen</MudText>
+                                <MudRating @bind-SelectedValue="_newTicket.EscalationLevel" Size="Size.Medium" />
+                            </div>
+                        </MudItem>
+                    </MudGrid>
+
+                    <div class="pdq-section-header">Beobachter (CC / Watchers)</div>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudSelect T="Person" Label="Watcher hinzufügen" ValueChanged="AddWatcher" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach(var p in _availablePersons) { <MudSelectItem Value="@p">@p.FirstName @p.LastName</MudSelectItem> }
+                            </MudSelect>
+                            
+                            @if (_newTicket.Watchers != null && _newTicket.Watchers.Any()) {
+                                <MudList T="string" Dense="true" Class="mt-2">
+                                    @foreach(var w in _newTicket.Watchers) {
+                                        <MudListItem T="string" Icon="@Icons.Material.Filled.Person">
+                                            <div class="d-flex align-center w-100">
+                                                <MudText Typo="Typo.body2">@w.FirstName @w.LastName</MudText>
+                                                <MudSpacer />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveWatcher(w))" />
+                                            </div>
+                                        </MudListItem>
+                                    }
+                                </MudList>
+                            }
+                        </MudItem>
+                    </MudGrid>
+                }
             }
         </div>
     </div>
@@ -232,8 +305,13 @@
     
     private bool _isLoading = true;
     private bool _isSaving = false;
+    private bool _dragActive = false;
+    private bool _hasDescription = false;
+    private bool _isSubmitPending = false;
+    private bool _editorInitialized = false;
     
     private DotNetObjectReference<TicketCreate>? _objRef;
+    private Dictionary<string, StringBuilder> _htmlChunks = new();
 
     private Ticket _newTicket = new() { 
         Title = "", 
@@ -241,15 +319,17 @@
         Status = "OFFEN", 
         Priority = "Normal",
         Category1 = "Incident (Störung)",
-        AssignedAssets = new List<Asset>()
+        EscalationLevel = 1,
+        AssignedAssets = new List<Asset>(),
+        Watchers = new List<Person>()
     };
     
     private List<Person> _availablePersons = new();
     private List<Tenant> _tenants = new();
     private List<AssetType> _dynamicAssetTypes = new();
     private List<Asset> _allAssets = new();
+    private List<Ticket> _allTickets = new();
 
-    // DIE NEUEN STRUKTUREN
     public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
     public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
@@ -261,6 +341,11 @@
         public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }
 
+    public Ticket? SelectedMasterTicket {
+        get => _newTicket.MasterTicketId.HasValue ? _allTickets.FirstOrDefault(t => t.Id == _newTicket.MasterTicketId) : null;
+        set { if (_newTicket.MasterTicketId != value?.Id) { _newTicket.MasterTicketId = value?.Id; } }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _isLoading = true;
@@ -270,6 +355,7 @@
             try { _tenants = await Http.GetFromJsonAsync<List<Tenant>>("api/tenants") ?? new(); } catch {}
             try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch {}
             try { _allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new(); } catch {}
+            try { _allTickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets") ?? new(); } catch {}
 
             try {
                 var settings = await Http.GetFromJsonAsync<SettingsDto>("api/settings/masterdata");
@@ -279,9 +365,20 @@
                 }
             } catch { }
 
-            // Fallback
             if (!_ticketStatuses.Any()) _ticketStatuses.Add(new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" });
             if (!_ticketPriorities.Any()) _ticketPriorities.Add(new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" });
+
+            if (IsEditMode)
+            {
+                var existing = await Http.GetFromJsonAsync<Ticket>($"api/tickets/{Id}");
+                if (existing != null)
+                {
+                    _newTicket = existing;
+                    _newTicket.AssignedAssets ??= new List<Asset>();
+                    _newTicket.Watchers ??= new List<Person>();
+                    _hasDescription = !string.IsNullOrWhiteSpace(_newTicket.Description);
+                }
+            }
 
             if (!_ticketStatuses.Any(s => s.Name == _newTicket.Status)) _newTicket.Status = _ticketStatuses.First().Name;
             if (!_ticketPriorities.Any(p => p.Name == _newTicket.Priority)) _newTicket.Priority = _ticketPriorities.First().Name;
@@ -310,34 +407,89 @@
         if (firstRender)
         {
             var jsCode = @"
-                window.attachImagePasteListener = function(wrapperId, dotNetRef) {
-                    var wrapper = document.getElementById(wrapperId);
-                    if(!wrapper) return;
+                window.initRichEditor = function(containerId, dotNetRef, initialHtml) { 
+                    var container = document.getElementById(containerId); 
+                    if(!container) return;
                     
-                    var el = wrapper.querySelector('textarea') || wrapper.querySelector('input');
-                    if(el && !el.dataset.pasteAttached) {
-                        el.dataset.pasteAttached = 'true';
-                        
-                        el.addEventListener('paste', function(e) {
-                            var clipboardData = e.clipboardData || window.clipboardData;
-                            if (!clipboardData) return;
-                            
-                            var items = clipboardData.items;
-                            for (var i = 0; i < items.length; i++) {
-                                if (items[i].type.indexOf('image') !== -1) {
-                                    e.preventDefault(); 
-                                    
-                                    var blob = items[i].getAsFile();
-                                    var reader = new FileReader();
-                                    reader.onload = function(event) {
-                                        dotNetRef.invokeMethodAsync('HandleImagePasted', event.target.result);
-                                    };
-                                    reader.readAsDataURL(blob);
-                                    break; 
+                    if(container.dataset.initialized) return; 
+                    container.dataset.initialized = 'true'; 
+                    
+                    var editor = document.createElement('div');
+                    editor.id = containerId + '-inner';
+                    editor.className = 'rich-editor';
+                    editor.contentEditable = 'true';
+                    editor.setAttribute('data-placeholder', container.getAttribute('data-placeholder') || 'Bitte tippen...');
+                    editor.innerHTML = initialHtml || '';
+                    
+                    container.appendChild(editor);
+                    
+                    editor.addEventListener('input', function() { 
+                        var hasText = editor.innerText.trim().length > 0 || editor.querySelectorAll('img, a').length > 0;
+                        if (editor.dataset.hasText !== String(hasText)) {
+                            editor.dataset.hasText = String(hasText);
+                            dotNetRef.invokeMethodAsync('SetHasDescription', hasText); 
+                        }
+                    }); 
+                    
+                    editor.addEventListener('paste', function(e) { 
+                        var clipboardData = e.clipboardData || window.clipboardData; 
+                        if (!clipboardData) return; 
+                        var items = clipboardData.items; 
+                        for (var i = 0; i < items.length; i++) { 
+                            if (items[i].type.indexOf('image') !== -1) { 
+                                e.preventDefault(); 
+                                var blob = items[i].getAsFile(); 
+                                var dt = new DataTransfer();
+                                dt.items.add(blob);
+                                var input = document.getElementById('hidden-file-input');
+                                if (input) {
+                                    input.files = dt.files;
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
                                 }
-                            }
-                        });
+                                break; 
+                            } 
+                        } 
+                    }); 
+                };
+                
+                window.appendRichEditor = function(containerId, htmlContent) {
+                    var editor = document.getElementById(containerId + '-inner');
+                    if(editor) {
+                        editor.focus();
+                        if (typeof window.getSelection !== 'undefined' && typeof document.createRange !== 'undefined') {
+                            var range = document.createRange();
+                            range.selectNodeContents(editor);
+                            range.collapse(false);
+                            var sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        }
+                        document.execCommand('insertHTML', false, htmlContent);
+                        editor.dispatchEvent(new Event('input'));
                     }
+                };
+
+                window.syncEditorContent = async function(containerId, dotNetRef, callbackMethod) {
+                    var editor = document.getElementById(containerId + '-inner');
+                    if(!editor) {
+                        await dotNetRef.invokeMethodAsync(callbackMethod, """");
+                        return;
+                    }
+
+                    var html = editor.innerHTML;
+                    const chunkSize = 20000;
+                    const totalChunks = Math.ceil(html.length / chunkSize);
+                    let sessionId = Math.random().toString(36).substring(2);
+
+                    if (totalChunks === 0) {
+                        await dotNetRef.invokeMethodAsync('ReceiveChunk', sessionId, """", 0, 1);
+                    } else {
+                        for (let i = 0; i < totalChunks; i++) {
+                            let chunk = html.substring(i * chunkSize, (i + 1) * chunkSize);
+                            await dotNetRef.invokeMethodAsync('ReceiveChunk', sessionId, chunk, i, totalChunks);
+                        }
+                    }
+                    await dotNetRef.invokeMethodAsync(callbackMethod, sessionId);
                 };
             ";
             
@@ -347,22 +499,58 @@
 
         if (!_isLoading && ActiveSteps.Count > 0 && ActiveSteps[_currentStepIndex].Id == "Basics")
         {
-            await JSRuntime.InvokeVoidAsync("attachImagePasteListener", "ticket-desc-wrapper", _objRef);
+            if (!_editorInitialized) {
+                _editorInitialized = true;
+                await JSRuntime.InvokeVoidAsync("initRichEditor", "ticket-desc-container", _objRef, _newTicket.Description);
+            }
+        }
+        else
+        {
+            _editorInitialized = false;
         }
     }
 
     [JSInvokable]
-    public void HandleImagePasted(string base64Image)
+    public void SetHasDescription(bool hasContent)
     {
-        string imgTag = $"\n<br/><img src=\"{base64Image}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
-        _newTicket.Description += imgTag;
-        
-        Snackbar.Add("Bild erfolgreich aus der Zwischenablage eingefügt.", Severity.Success);
-        StateHasChanged();
+        if (_hasDescription != hasContent)
+        {
+            _hasDescription = hasContent;
+            StateHasChanged();
+        }
     }
 
-    private async Task UploadFiles(IReadOnlyList<IBrowserFile> files)
+    [JSInvokable]
+    public void ReceiveChunk(string sessionId, string chunk, int index, int total)
     {
+        if (!_htmlChunks.ContainsKey(sessionId)) _htmlChunks[sessionId] = new StringBuilder();
+        _htmlChunks[sessionId].Append(chunk);
+    }
+
+    [JSInvokable]
+    public async Task ProcessDescriptionAndProceed(string sessionId)
+    {
+        if (_htmlChunks.TryGetValue(sessionId, out var sb))
+        {
+            _newTicket.Description = sb.ToString();
+            _htmlChunks.Remove(sessionId);
+        }
+        else
+        {
+            _newTicket.Description = "";
+        }
+
+        if (_isSubmitPending) {
+            await SubmitTicketAction();
+        } else {
+            _currentStepIndex++;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UploadFiles(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(10);
         foreach (var file in files)
         {
             try
@@ -374,15 +562,20 @@
                 var base64 = Convert.ToBase64String(ms.ToArray());
                 var mimeType = file.ContentType;
                 
+                string appendHtml = "";
+                
                 if (mimeType.StartsWith("image/"))
                 {
-                    _newTicket.Description += $"\n<br/><img src=\"data:{mimeType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0;\" /><br/>\n";
+                    appendHtml = $"<br/><img src=\"data:{mimeType};base64,{base64}\" style=\"max-width: 100%; border-radius: 6px; border: 1px solid #ddd; margin: 10px 0; display: block;\" /><br/>";
                 }
                 else
                 {
-                    _newTicket.Description += $"\n<br/><a href=\"data:{mimeType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>\n";
+                    appendHtml = $"<br/><a href=\"data:{mimeType};base64,{base64}\" download=\"{file.Name}\" style=\"display: inline-flex; align-items: center; padding: 8px 12px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; margin: 5px 0;\">📎 {file.Name} ({(file.Size / 1024)} KB)</a><br/>";
                 }
                 
+                await JSRuntime.InvokeVoidAsync("appendRichEditor", "ticket-desc-container", appendHtml);
+                
+                SetHasDescription(true);
                 Snackbar.Add($"{file.Name} erfolgreich angehängt.", Severity.Success);
             }
             catch (Exception ex)
@@ -399,10 +592,23 @@
         ActiveSteps.Add(new WizardStep { Id = "Basics", Name = "Problem", Icon = Icons.Material.Filled.Description });
         ActiveSteps.Add(new WizardStep { Id = "Classification", Name = "Klassifizierung", Icon = Icons.Material.Filled.Category });
         ActiveSteps.Add(new WizardStep { Id = "Assets", Name = "Assets", Icon = Icons.Material.Filled.Computer });
+        ActiveSteps.Add(new WizardStep { Id = "Extended", Name = "Erweitert", Icon = Icons.Material.Filled.MoreTime });
         StateHasChanged();
     }
 
-    private void NextStep() { if (_currentStepIndex < ActiveSteps.Count - 1) _currentStepIndex++; }
+    private async Task NextStep() 
+    { 
+        if (_currentStepIndex == 0) 
+        {
+            _isSubmitPending = false;
+            await JSRuntime.InvokeVoidAsync("syncEditorContent", "ticket-desc-container", _objRef, "ProcessDescriptionAndProceed");
+        }
+        else if (_currentStepIndex < ActiveSteps.Count - 1) 
+        {
+            _currentStepIndex++; 
+        }
+    }
+
     private void PrevStep() { if (_currentStepIndex > 0) _currentStepIndex--; }
     private void JumpToStep(int index) { if (index <= _currentStepIndex || CanProceed()) _currentStepIndex = index; }
 
@@ -413,7 +619,7 @@
         if (ActiveSteps[_currentStepIndex].Id == "Basics") 
         {
             return !string.IsNullOrWhiteSpace(_newTicket.Title) 
-                && !string.IsNullOrWhiteSpace(_newTicket.Description)
+                && _hasDescription
                 && _newTicket.RequesterId.HasValue
                 && _newTicket.TenantId != Guid.Empty;
         }
@@ -433,6 +639,14 @@
         ).Take(10));
     }
 
+    private Task<IEnumerable<Ticket>> SearchTickets(string val, CancellationToken ct) {
+        if (string.IsNullOrWhiteSpace(val)) return Task.FromResult(_allTickets.Take(10));
+        return Task.FromResult(_allTickets.Where(t => 
+            t.TicketNumber.ToString().Contains(val) || 
+            (t.Title != null && t.Title.Contains(val, StringComparison.OrdinalIgnoreCase))
+        ).Take(10));
+    }
+
     private void AddAsset(Asset? a) { 
         if (a != null) {
             _newTicket.AssignedAssets ??= new List<Asset>();
@@ -441,23 +655,56 @@
             }
         }
     }
-
     private void RemoveAsset(Asset a) { _newTicket.AssignedAssets?.Remove(a); }
+
+    private void AddWatcher(Person p) { 
+        if (p != null) {
+            _newTicket.Watchers ??= new List<Person>();
+            if (!_newTicket.Watchers.Any(w => w.Id == p.Id)) _newTicket.Watchers.Add(p); 
+        }
+    }
+    private void RemoveWatcher(Person p) { _newTicket.Watchers?.Remove(p); }
 
     private async Task SubmitTicket()
     {
         if (!CanProceed()) return;
 
+        if (_currentStepIndex == 0)
+        {
+            _isSubmitPending = true;
+            await JSRuntime.InvokeVoidAsync("syncEditorContent", "ticket-desc-container", _objRef, "ProcessDescriptionAndProceed");
+        }
+        else
+        {
+            await SubmitTicketAction();
+        }
+    }
+
+    private async Task SubmitTicketAction()
+    {
         _isSaving = true;
+        StateHasChanged();
+        
         try
         {
-            var response = await Http.PostAsJsonAsync("api/tickets", _newTicket);
+            HttpResponseMessage response;
+            if (IsEditMode)
+            {
+                response = await Http.PutAsJsonAsync($"api/tickets/{Id}", _newTicket);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync("api/tickets", _newTicket);
+            }
 
             if (response.IsSuccessStatusCode)
             {
-                var created = await response.Content.ReadFromJsonAsync<Ticket>();
-                Snackbar.Add("Ticket erfolgreich erstellt!", Severity.Success);
-                Nav.NavigateTo(created != null ? $"/tickets/{created.Id}" : "/tickets");
+                Snackbar.Add(IsEditMode ? "Ticket erfolgreich aktualisiert!" : "Ticket erfolgreich erstellt!", Severity.Success);
+                if (IsEditMode) Nav.NavigateTo($"/tickets/{Id}");
+                else {
+                    var created = await response.Content.ReadFromJsonAsync<Ticket>();
+                    Nav.NavigateTo(created != null ? $"/tickets/{created.Id}" : "/tickets");
+                }
             }
             else
             {
