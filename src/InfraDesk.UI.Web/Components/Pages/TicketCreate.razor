@@ -11,10 +11,9 @@
 @inject IJSRuntime JSRuntime
 @implements IAsyncDisposable
 
-<PageTitle>InfraDesk - @(IsEditMode ? "Asset bearbeiten" : "Neues Ticket anlegen")</PageTitle>
+<PageTitle>InfraDesk - @(IsEditMode ? "Ticket bearbeiten" : "Neues Ticket anlegen")</PageTitle>
 
 <style>
-    /* PDQ Inventory Style: High Density Layout */
     .pdq-container { background-color: #fff; height: calc(100vh - 150px); display: flex; flex-direction: row; border: 1px solid #ccc; border-radius: 0 0 4px 4px; border-top: none; overflow: hidden; }
     .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 24px; }
@@ -24,7 +23,6 @@
     
     .pdq-toolbar { height: 48px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px 4px 0 0; display: flex; align-items: center; padding: 0 16px; margin-top: 24px; }
     
-    /* Wizard Step Styles in Sidebar */
     .wizard-step { padding: 12px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; transition: background-color 0.2s; cursor: pointer; }
     .wizard-step.active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
     .wizard-step.completed { color: var(--mud-palette-success); }
@@ -55,7 +53,6 @@
     </div>
 
     <div class="pdq-container">
-        
         <div class="pdq-sidebar">
             <div class="pdq-section-header" style="margin-bottom: 0;">Erstellungsprozess</div>
             
@@ -106,7 +103,6 @@
                                               Lines="10" />
                             </div>
                             
-                            <!-- NEU: FILE UPLOAD -->
                             <div class="mt-2">
                                 <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadFiles" MaximumFileCount="10">
                                     <ActivatorContent>
@@ -145,13 +141,31 @@
                                 <MudSelectItem Value="@("Change (Änderung)")"><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Color="Color.Warning" Class="mr-2"/>Change</div></MudSelectItem>
                             </MudSelect>
                         </MudItem>
+                        
                         <MudItem xs="12" md="6">
                             <MudSelect T="string" Label="Priorität *" @bind-Value="_newTicket.Priority" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
-                                <MudSelectItem Value="@("Niedrig")">Niedrig</MudSelectItem>
-                                <MudSelectItem Value="@("Normal")">Normal</MudSelectItem>
-                                <MudSelectItem Value="@("Hoch")">Hoch</MudSelectItem>
+                                @foreach (var p in _ticketPriorities) {
+                                    <MudSelectItem Value="@p.Name">
+                                        <div class="d-flex align-center" style="font-weight: bold; color: @p.Color;">
+                                            <MudIcon Icon="@GetDynamicIcon(p.Icon)" Size="Size.Small" Class="mr-2"/>@p.Name.ToUpper()
+                                        </div>
+                                    </MudSelectItem>
+                                }
                             </MudSelect>
                         </MudItem>
+                        
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="string" Label="Status *" @bind-Value="_newTicket.Status" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Required="true">
+                                @foreach (var s in _ticketStatuses) {
+                                    <MudSelectItem Value="@s.Name">
+                                        <div class="d-flex align-center" style="font-weight: bold; color: @s.Color;">
+                                            <MudIcon Icon="@GetDynamicIcon(s.Icon)" Size="Size.Small" Class="mr-2"/>@s.Name.ToUpper()
+                                        </div>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+
                         <MudItem xs="12" md="6">
                             <MudSelect T="string" Label="Asset-Kategorie" @bind-Value="_newTicket.Category2" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
                                 @foreach(var type in _dynamicAssetTypes) { <MudSelectItem Value="@type.Name">@type.Name</MudSelectItem> }
@@ -235,6 +249,18 @@
     private List<AssetType> _dynamicAssetTypes = new();
     private List<Asset> _allAssets = new();
 
+    // DIE NEUEN STRUKTUREN
+    public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
+    public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
+
+    private List<TicketStatusItem> _ticketStatuses = new();
+    private List<TicketPriorityItem> _ticketPriorities = new();
+
+    public class SettingsDto {
+        public List<TicketStatusItem> TicketStatusList { get; set; } = new();
+        public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _isLoading = true;
@@ -245,6 +271,21 @@
             try { _dynamicAssetTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch {}
             try { _allAssets = await Http.GetFromJsonAsync<List<Asset>>("api/assets") ?? new(); } catch {}
 
+            try {
+                var settings = await Http.GetFromJsonAsync<SettingsDto>("api/settings/masterdata");
+                if (settings != null) {
+                    if (settings.TicketStatusList?.Any() == true) _ticketStatuses = settings.TicketStatusList;
+                    if (settings.TicketPriorityList?.Any() == true) _ticketPriorities = settings.TicketPriorityList;
+                }
+            } catch { }
+
+            // Fallback
+            if (!_ticketStatuses.Any()) _ticketStatuses.Add(new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" });
+            if (!_ticketPriorities.Any()) _ticketPriorities.Add(new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" });
+
+            if (!_ticketStatuses.Any(s => s.Name == _newTicket.Status)) _newTicket.Status = _ticketStatuses.First().Name;
+            if (!_ticketPriorities.Any(p => p.Name == _newTicket.Priority)) _newTicket.Priority = _ticketPriorities.First().Name;
+
             if (_tenants.Any() && _newTicket.TenantId == Guid.Empty)
             {
                 _newTicket.TenantId = _tenants.First().Id;
@@ -253,6 +294,15 @@
             RebuildSteps();
         }
         finally { _isLoading = false; }
+    }
+
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
+        } catch {}
+        return Icons.Material.Filled.Label;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -311,14 +361,13 @@
         StateHasChanged();
     }
 
-    // NEU: Logik zum Verarbeiten hochgeladener Dateien
     private async Task UploadFiles(IReadOnlyList<IBrowserFile> files)
     {
         foreach (var file in files)
         {
             try
             {
-                var maxAllowedSize = 10 * 1024 * 1024; // 10 MB pro Datei Limit
+                var maxAllowedSize = 10 * 1024 * 1024;
                 using var stream = file.OpenReadStream(maxAllowedSize);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms);
@@ -370,7 +419,7 @@
         }
         if (ActiveSteps[_currentStepIndex].Id == "Classification") 
         {
-            return !string.IsNullOrWhiteSpace(_newTicket.Category1) && !string.IsNullOrWhiteSpace(_newTicket.Priority);
+            return !string.IsNullOrWhiteSpace(_newTicket.Category1) && !string.IsNullOrWhiteSpace(_newTicket.Priority) && !string.IsNullOrWhiteSpace(_newTicket.Status);
         }
         
         return true; 
@@ -429,6 +478,6 @@
 
     public async ValueTask DisposeAsync()
     {
-        _objRef?.Dispose();
+        if (_objRef != null) _objRef.Dispose();
     }
 }

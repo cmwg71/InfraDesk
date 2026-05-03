@@ -1,42 +1,60 @@
-## Dateiname: T3_03_Mobile_Scan_Actions.md
+**Phase:** Stufe 3 (Mehrwertfunktionen)  
+**Aufgabe:** Mobile Scan & Quick-Actions  
+**ID:** 033  
+**Status:** Enterprise-Ready
 
-Phase: Stufe 3 (Mehrwertfunktionen)
+Aufgabenstellung: Mobile Infrastructure Management (MIM)
 
-Aufgabe: Mobile Scan & Quick-Actions
+1. Beschreibung
 
-Beschreibung: Smartphone-Integration zum Scannen von Assets und Ändern von Status/Standort.
+Bereitstellung einer spezialisierten Web-App (PWA - Progressive Web App), die Technikern vor Ort den Zugriff auf CMDB-Daten via QR-Code ermöglicht. Der Fokus liegt auf maximaler Geschwindigkeit bei Routineaufgaben wie Inventur, Rollout und Standortwechsel.
 
-ID: 033
+2. Funktionsumfang (Enterprise-Standard)
 
-# Aufgabenstellung: Mobile Scan & Quick-Actions
+2.1 Intelligenter Mobile-Scanner
 
-### Beschreibung
+- **Multi-Scan Mode:** Möglichkeit, mehrere QR-Codes hintereinander zu scannen (z. B. 20 Laptops auf einem Rollwagen), um eine Sammel-Aktion auszuführen.
+- **Flashlight-Steuerung:** Integration der Kamera-LED für Scans in dunklen Server-Racks oder Lagerräumen.
+- **Deep-Link Validation:** Die App prüft beim Scan den Security-Hash (aus T1_19), um unbefugtes Auslesen von URLs zu verhindern.
 
-Ermöglicht Technikern vor Ort, Assets via Smartphone zu scannen, Informationen abzurufen und sofortige Änderungen vorzunehmen.
+2.2 Kontextsensitive Quick-Actions
 
-### Funktionsumfang
+Basierend auf dem aktuellen Status des Assets bietet die App nur logisch sinnvolle Aktionen an:
 
-1. **Mobile Scanner**:
-    
-    - Nutzung der Smartphone-Kamera zum Scannen der QR-Codes (T1_19).
-        
-2. **Quick-Actions**:
-    
-    - **Status-Änderung**: Mit einem Klick von "In Lager" auf "Aktiv" setzen.
-        
-    - **Standort-Update**: Automatische oder manuelle Zuweisung des aktuellen Raums/Standorts.
-        
-    - **Besitzer-Check**: Anzeige, welcher Person das Asset aktuell zugeordnet ist.
-        
-3. **API-Integration**:
-    
-    - Spezialisierte Endpunkte für schnelle Mobile-Updates (minimale Payload).
-        
+- **Smart Rollout:** Scan eines Laptops im Lager -> Aktion: "An User ausgeben" (öffnet Suche für AD-Benutzer).
+- **Inventory Mode:** Ein einfacher "Bestätigen"-Button setzt das `LastSeen`-Datum und den Bearbeiter-Stempel im Asset.
+- **Foto-Upload:** Direkte Integration der Kamera zur Dokumentation von Transportschäden oder Rack-Einbauten (Direkt-Upload in Modul T1_10).
 
-### Abnahmekriterien
+2.3 Standort- & Umzugslogik
 
-- Ein Scan eines QR-Codes öffnet sofort die Asset-Kurzansicht auf dem Smartphone.
-    
-- Status- und Standortänderungen werden in Echtzeit (SignalR) an den WinUI-Client gemeldet.
-    
-- Alle mobilen Änderungen werden im Audit-Log mit dem Zusatz "Mobile Scan" vermerkt.
+- **Room-Mapping:** Scan eines Raum-Labels gefolgt von mehreren Asset-Scans ordnet alle Geräte sofort dem neuen Raum zu.
+- **GPS-Tagging:** Optionales Speichern der Geokoordinaten beim Scan zur Verifizierung bei weitläufigen Geländen oder Außenstellen.
+
+3. Technische Umsetzung & Sicherheit
+
+3.1 PWA-Architektur (Offline-First)
+
+- **Offline-Buffer:** Änderungen werden lokal gespeichert, falls im Serverraum kein WLAN/LTE verfügbar ist, und synchronisiert, sobald wieder Empfang besteht.
+- **Responsive UI:** Optimierung für Einhand-Bedienung (große Buttons, Daumen-zentrisches Design).
+
+3.2 Mobile Security
+
+- **Conditional Access:** Zugriff nur über Firmengeräte oder via MFA (Multi-Faktor-Authentifizierung).
+- **Device-Binding:** Verknüpfung der mobilen Session mit der Geräte-ID des Technikers.
+- **Session-Limit:** Kürzere Timeouts für mobile Sessions im Vergleich zum Desktop-Client.
+
+4. Workflow (Beispiel: Gerätetausch)
+
+5. **Scan Alt-Gerät:** Techniker scannt defekten PC -> Status "Defekt/Abbau".
+6. **Scan Neu-Gerät:** Techniker scannt Austauschgerät -> Status "Aktiv".
+7. **Owner-Transfer:** App fragt: "Besitzer [User X] von Alt-Gerät übernehmen?" -> Bestätigung.
+8. **Abschluss:** CMDB aktualisiert beide Assets; Benachrichtigungs-Engine (T1_09) informiert User X über den Tausch.
+
+9. Abnahmekriterien
+
+- **Geschwindigkeit:** Zeit vom Scan bis zur Anzeige der Quick-Actions beträgt < 1,5 Sekunden.
+- **Feedback-Schleife:** Änderungen via Mobile werden sofort im Desktop-Client (WinUI) via SignalR visualisiert (z. B. Asset springt in der Liste von "Lager" auf "Aktiv").
+- **Audit-Integrität:** Jede mobile Änderung ist im Audit-Log eindeutig als "Source: Mobile-App" und mit der Geräte-ID des Smartphones gekennzeichnet.
+- **Fehlertoleranz:** Bei Fehlscans (z. B. QR-Code eines Drittanbieters) erfolgt eine klare, benutzerfreundliche Fehlermeldung statt eines Systemabsturzes.
+
+---

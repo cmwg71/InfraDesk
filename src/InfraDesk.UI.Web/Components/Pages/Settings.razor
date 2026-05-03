@@ -8,6 +8,7 @@
 @inject ThemeService ThemeService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
 
 <PageTitle>InfraDesk - Einstellungen</PageTitle>
 
@@ -30,15 +31,6 @@
     .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
     .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
     .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
-
-    .label-preview-container { border: 1px solid #ccc; padding: 20px; background: #eee; border-radius: 8px; display: flex; justify-content: center; }
-    .physical-label { background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; position: relative; border: 1px solid #999; }
-    .label-header { width: 100%; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; font-weight: bold; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .label-footer { width: 100%; text-align: center; border-top: 1px solid #eee; padding-top: 4px; margin-top: 8px; font-size: 0.6rem; color: #888; }
-    .barcode-svg-mock { width: 80%; height: 40px; background: repeating-linear-gradient(90deg, #000, #000 2px, #fff 2px, #fff 4px); margin-bottom: 4px; }
-    .qr-container { position: relative; width: 64px; height: 64px; background: #000; padding: 2px; }
-    .qr-white-inner { width: 100%; height: 100%; background: #fff; display: flex; align-items: center; justify-content: center; position: relative; }
-    .qr-logo-overlay { position: absolute; width: 16px; height: 16px; background: #fff; border: 1px solid #000; display: flex; align-items: center; justify-content: center; z-index: 5; }
 </style>
 
 <div class="pdq-toolbar">
@@ -55,15 +47,19 @@
     <div class="pdq-sidebar">
         <MudNavMenu Margin="Margin.Dense" Rounded="false">
             <div class="pdq-section-header">Mandant & Organisation</div>
-            <MudNavLink OnClick="@(() => SetActiveSection("MasterData"))" Class="@GetActiveCss("MasterData")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
-            <MudNavLink OnClick="@(() => SetActiveSection("Lifecycle"))" Class="@GetActiveCss("Lifecycle")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
-            <MudNavLink OnClick="@(() => SetActiveSection("TagSchema"))" Class="@GetActiveCss("TagSchema")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "MasterData")" Class="@(_activeSection == "MasterData" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Business">Stammdaten</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Lifecycle")" Class="@(_activeSection == "Lifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Autorenew">Asset-Lebenszyklus</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "TagSchema")" Class="@(_activeSection == "TagSchema" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.QrCode">Asset-Tag Schema</MudNavLink>
             
+            <div class="pdq-section-header">Service-Desk / ITSM</div>
+            <MudNavLink OnClick="@(() => _activeSection = "TicketViews")" Class="@(_activeSection == "TicketViews" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.FilterAlt">Standard-Ansichten</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "TicketLifecycle")" Class="@(_activeSection == "TicketLifecycle" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.LowPriority">Status & Prioritäten</MudNavLink>
+
             <div class="pdq-section-header">UI & Personalisierung</div>
-            <MudNavLink OnClick="@(() => SetActiveSection("Design"))" Class="@GetActiveCss("Design")" Icon="@Icons.Material.Filled.Palette">Farben & Themes</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Design")" Class="@(_activeSection == "Design" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Palette">Farben & Themes</MudNavLink>
             
             <div class="pdq-section-header">System & Service</div>
-            <MudNavLink OnClick="@(() => SetActiveSection("Info"))" Class="@GetActiveCss("Info")" Icon="@Icons.Material.Filled.Update">Update & Info</MudNavLink>
+            <MudNavLink OnClick="@(() => _activeSection = "Info")" Class="@(_activeSection == "Info" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Update">Update & Info</MudNavLink>
         </MudNavMenu>
     </div>
 
@@ -97,10 +93,86 @@
                     </MudItem>
                 </MudGrid>
             }
+            else if (_activeSection == "TicketViews")
+            {
+                <div class="pdq-section-header">Ticket-Queue & Filter-Optionen</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, was Agenten und Benutzer sehen, wenn sie den Service-Desk öffnen.</MudText>
+                
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <MudCard Outlined="true" Class="h-100">
+                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1" Class="font-weight-bold">Standard-Listenansicht</MudText></CardHeaderContent></MudCardHeader>
+                            <MudCardContent>
+                                <MudSelect T="string" Label="Primärer Filter beim Öffnen" @bind-Value="_masterData.TicketDefaultFilter" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                                    <MudSelectItem Value="@("Alle")">Alle Tickets anzeigen</MudSelectItem>
+                                    <MudSelectItem Value="@("Meins")">Nur eigene Tickets anzeigen (Zugewiesen)</MudSelectItem>
+                                    <MudSelectItem Value="@("NichtZugewiesen")">Nur nicht zugewiesene anzeigen (Warteschlange)</MudSelectItem>
+                                </MudSelect>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Dieser Filter ist sofort aktiv, wenn das Service-Desk Modul aufgerufen wird.</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudCard Outlined="true" Class="h-100">
+                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1" Class="font-weight-bold">Sichtbarkeit & Archiv</MudText></CardHeaderContent></MudCardHeader>
+                            <MudCardContent>
+                                <MudSwitch T="bool" @bind-Value="_masterData.TicketShowClosed" Label="Geschlossene Tickets standardmäßig einblenden" Color="Color.Primary" Class="mb-2" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Wenn deaktiviert, werden geschlossene/archivierte Tickets initial aus der Liste gefiltert, um die Übersichtlichkeit zu erhöhen.</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (_activeSection == "TicketLifecycle")
+            {
+                <div class="pdq-section-header">Ticket Status (Workflow)</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Klicken Sie in eine Zelle der Tabelle, um Namen, Farbe oder Icon zu bearbeiten.</MudText>
+                
+                <MudDataGrid Items="@_masterData.TicketStatusList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="Status-Name" />
+                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
+                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
+                        <TemplateColumn Title="Vorschau" Editable="false">
+                            <CellTemplate>
+                                <MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
+                            <CellTemplate>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Remove(context.Item))" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Add(new TicketStatusItem{Name="NEU", Color="#757575", Icon="Label"}))">Neuen Status hinzufügen</MudButton>
+
+                <div class="pdq-section-header mt-8">Ticket Prioritäten</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Klassifizieren Sie die Dringlichkeit von IT-Störungen und Anfragen.</MudText>
+
+                <MudDataGrid Items="@_masterData.TicketPriorityList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="Prioritäts-Name" />
+                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
+                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
+                        <TemplateColumn Title="Vorschau" Editable="false">
+                            <CellTemplate>
+                                <MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
+                            <CellTemplate>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Remove(context.Item))" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Add(new TicketPriorityItem{Name="NEU", Color="#333333", Icon="Flag"}))">Neue Priorität hinzufügen</MudButton>
+            }
             else if (_activeSection == "Lifecycle")
             {
-                <div class="pdq-section-header">Lebenszyklus Phasen & Status</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, welche Zustände ein Asset in Ihrem Unternehmen durchlaufen kann.</MudText>
+                <div class="pdq-section-header">Asset-Lebenszyklus Phasen & Status</div>
+                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, welche Zustände ein Hardware- oder Software-Asset in Ihrem Unternehmen durchlaufen kann.</MudText>
                 
                 @foreach (var group in _lifecycleConfig)
                 {
@@ -287,20 +359,21 @@
         try
         {
             _masterData = await Http.GetFromJsonAsync<MasterDataDto>("api/settings/masterdata") ?? new();
-            _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/asset-lifecycle") ?? new();
+            _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle") ?? new();
             _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new();
             
             if (string.IsNullOrWhiteSpace(_masterData.AssetTagPattern)) _masterData.AssetTagPattern = "{COMP}-{LOC}-{CAT}-{NUM:5}";
-            _tempPrimaryColor = ThemeService.Config.PrimaryColor;
             
+            // Initialisiere leere Listen sicherheitshalber
+            _masterData.TicketStatusList ??= new();
+            _masterData.TicketPriorityList ??= new();
+            
+            _tempPrimaryColor = ThemeService.Config.PrimaryColor;
             _ = CheckForUpdates();
         }
         catch { Snackbar.Add("Fehler beim Laden der Einstellungen.", Severity.Error); }
         finally { _isLoading = false; }
     }
-
-    private void SetActiveSection(string section) => _activeSection = section;
-    private string GetActiveCss(string section) => _activeSection == section ? "sidebar-active" : "";
 
     private void OnFieldChanged() => StateHasChanged();
 
@@ -309,15 +382,25 @@
         _isSaving = true;
         try
         {
-            if (_activeSection == "MasterData" || _activeSection == "TagSchema")
+            if (_activeSection == "MasterData" || _activeSection == "TagSchema" || _activeSection == "TicketViews" || _activeSection == "TicketLifecycle")
                 await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
             else if (_activeSection == "Lifecycle")
-                await Http.PostAsJsonAsync("api/settings/asset-lifecycle", _lifecycleConfig);
+                await Http.PostAsJsonAsync("api/settings/dynamic/asset-lifecycle", _lifecycleConfig);
             
-            Snackbar.Add("Konfiguration erfolgreich gespeichert.", Severity.Success);
+            Snackbar.Add("Erfolgreich gespeichert.", Severity.Success);
         }
-        catch { Snackbar.Add("Fehler beim Speichern der Einstellungen.", Severity.Error); }
+        catch { Snackbar.Add("Fehler beim Speichern.", Severity.Error); }
         finally { _isSaving = false; }
+    }
+    
+    // Geniale Hilfsfunktion: Erkennt aus dem Text-Namen direkt das SVG-Icon von MudBlazor!
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
+        } catch {}
+        return Icons.Material.Filled.Label;
     }
 
     private string GetTagPreview()
@@ -339,7 +422,6 @@
 
     private async Task PrintTestLabel()
     {
-        // 100% sauberer C# Code ohne Razor-Parser Fallstricke
         string tag = GetTagPreview();
         string company = _masterData.PrintCompanyName ? _masterData.CompanyName : "";
         string assetName = _masterData.PrintAssetName ? "TEST-SERVER-01" : "";
@@ -364,7 +446,6 @@
             "<div class='barcode'></div>" + tagHtml + "</div><div class='qr'>" + qrSvg + "</div></div>" +
             footerHtml + "</div></body></html>";
 
-        // Verschlüsselt das HTML in Base64, damit im JavaScript keine Quotes-Fehler entstehen
         string base64Html = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html));
         await JSRuntime.InvokeVoidAsync("eval", "var w = window.open('', '_blank'); w.document.write(atob('" + base64Html + "')); w.document.close();");
     }
@@ -409,6 +490,10 @@
         finally { _isChecking = false; StateHasChanged(); }
     }
 
+    // --- NEUE STRUKTUREN FÜR FARBEN & ICONS (Korrekter JSON Parse Typ) ---
+    public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
+    public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
+
     public class MasterDataDto
     {
         public string CompanyName { get; set; } = "";
@@ -431,5 +516,13 @@
         public bool PrintCompanyName { get; set; } = true;
         public bool PrintSerialNumber { get; set; } = false;
         public int PrintResolutionDpi { get; set; } = 300;
+        
+        // Ticket Settings
+        public string TicketDefaultFilter { get; set; } = "Alle";
+        public bool TicketShowClosed { get; set; } = false;
+        
+        // WICHTIG: Ersetzt die alten "OFFEN,AKTIV"-Strings durch strukturierte Listen
+        public List<TicketStatusItem> TicketStatusList { get; set; } = new();
+        public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
     }
 }

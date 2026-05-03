@@ -7,37 +7,30 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>InfraDesk - @(IsEditMode ? "Asset bearbeiten" : "Neues Asset anlegen")</PageTitle>
 
 <style>
-    /* PDQ Inventory Style: High Density Layout */
     .pdq-container { background-color: #fff; height: calc(100vh - 150px); display: flex; flex-direction: row; border: 1px solid #ccc; border-radius: 0 0 4px 4px; border-top: none; overflow: hidden; }
     .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 24px; }
-    
     .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 16px; margin-top: 24px; }
     .pdq-section-header:first-child { margin-top: 0; border-top: none; }
-    
     .pdq-toolbar { height: 48px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px 4px 0 0; display: flex; align-items: center; padding: 0 16px; margin-top: 24px; }
-    
-    /* Wizard Step Styles in Sidebar */
     .wizard-step { padding: 12px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; transition: background-color 0.2s; }
     .wizard-step.active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
     .wizard-step.completed { color: var(--mud-palette-success); }
+    
+    .template-builder-box { border: 2px dashed var(--mud-palette-secondary); padding: 16px; background-color: #fafafa; border-radius: 8px; margin-top: 16px; }
 </style>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-8">
-
-    <!-- PDQ Toolbar (Kopfzeile) -->
     <div class="pdq-toolbar">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/assets"))" Size="Size.Small" Class="mr-2" />
         <MudIcon Icon="@(IsEditMode ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddBox)" Color="Color.Primary" Size="Size.Small" Class="mr-2" />
         <MudText Typo="Typo.body2" Class="font-weight-bold">@(IsEditMode ? $"Objekt bearbeiten: {_newAsset.Name}" : "Neues Objekt anlegen")</MudText>
-        
         <MudSpacer />
-        
-        <!-- Navigation Buttons -->
         <MudButton Disabled="@(_currentStepIndex == 0)" OnClick="PrevStep" Variant="Variant.Outlined" Size="Size.Small" Class="mr-2" Style="background-color: white;">Zurück</MudButton>
         @if (_currentStepIndex < ActiveSteps.Count - 1)
         {
@@ -49,20 +42,15 @@
         }
     </div>
 
-    <!-- PDQ Hauptbereich -->
     <div class="pdq-container">
-        
-        <!-- LINKE SEITE: Wizard Navigation -->
         <div class="pdq-sidebar">
             <div class="pdq-section-header" style="margin-bottom: 0;">Erstellungsprozess</div>
-            
             @for (int i = 0; i < ActiveSteps.Count; i++)
             {
                 int index = i;
                 var step = ActiveSteps[index];
                 bool isActive = index == _currentStepIndex;
                 bool isCompleted = index < _currentStepIndex;
-
                 <div class="wizard-step @(isActive ? "active" : "") @(isCompleted ? "completed" : "")">
                     <MudIcon Icon="@(isCompleted ? Icons.Material.Filled.CheckCircle : step.Icon)" Size="Size.Small" Class="mr-3" />
                     <span style="font-size: 0.85rem;">@step.Name</span>
@@ -70,7 +58,6 @@
             }
         </div>
 
-        <!-- RECHTE SEITE: Formular-Inhalte -->
         <div class="pdq-content">
             @if (_isLoading)
             {
@@ -80,29 +67,19 @@
             {
                 var currentStepDef = ActiveSteps[_currentStepIndex];
 
-                <!-- SCHRITT 1: KATEGORIE & TYP -->
                 @if (currentStepDef.Id == "Category")
                 {
                     <div class="pdq-section-header">1. Vorlage & Identifikation</div>
-                    
                     @if (string.IsNullOrWhiteSpace(CompanyPrefix))
                     {
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-6" Style="border-radius: 4px;">
-                            <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Stammdaten fehlen!</MudText>
-                            <MudText Typo="Typo.body2">Bevor Sie neue Assets anlegen können, müssen Sie in den System-Einstellungen zwingend Ihr Firmen-Kürzel und den Hauptstandort konfigurieren.</MudText>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Class="mt-3" Size="Size.Small" OnClick="@(() => Nav.NavigateTo("/settings"))">Zu den Einstellungen wechseln</MudButton>
-                        </MudAlert>
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-6">Stammdaten fehlen in den Einstellungen!</MudAlert>
                     }
                     else
                     {
-                        <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">Die gewählten Parameter definieren das Asset-Tag Schema und den dynamischen Erstellungsprozess.</MudText>
-
                         <MudGrid Spacing="2" Class="mb-4">
-                            <MudItem xs="12" md="4">
-                                <MudTextField Value="CompanyPrefix" Label="Firma (Kürzel)" Variant="Variant.Outlined" ReadOnly="true" Margin="Margin.Dense" HelperText="Zentral verwaltet" />
-                            </MudItem>
+                            <MudItem xs="12" md="4"><MudTextField Value="CompanyPrefix" Label="Firma (Kürzel)" Variant="Variant.Outlined" ReadOnly="true" Margin="Margin.Dense" /></MudItem>
                             <MudItem xs="12" md="8">
-                                <MudSelect T="Guid?" Label="Physischer Standort" @bind-Value="SelectedLocationId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true" HelperText="Definiert das Orts-Kürzel">
+                                <MudSelect T="Guid?" Label="Physischer Standort" @bind-Value="SelectedLocationId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                                     @foreach (var loc in _locations) { <MudSelectItem T="Guid?" Value="@loc.Id">@loc.Name</MudSelectItem> }
                                 </MudSelect>
                             </MudItem>
@@ -111,23 +88,19 @@
                         <div class="pdq-section-header">Kategorisierung</div>
                         <MudGrid Spacing="2">
                             <MudItem xs="12" md="4">
-                                <MudSelect T="string" Label="Hauptkategorie" @bind-Value="SelectedCategory" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
-                                    @foreach (var cat in _categoryMap.Keys) { <MudSelectItem Value="@cat">@cat</MudSelectItem> }
+                                <MudSelect T="string" Label="Hauptkategorie" @bind-Value="SelectedCategory" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var cat in _categories) { <MudSelectItem Value="@cat">@cat</MudSelectItem> }
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="12" md="8">
                                 @if (!string.IsNullOrEmpty(SelectedCategory))
                                 {
-                                    <MudSelect T="AssetType" Label="Spezifischer Asset-Typ" @bind-Value="SelectedType" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" ToStringFunc="@(t => t == null ? "" : t.Name)">
-                                        @foreach (var typeName in _categoryMap[SelectedCategory])
+                                    <MudSelect T="AssetType" Label="Spezifischer Asset-Typ" @bind-Value="SelectedType" Variant="Variant.Outlined" Margin="Margin.Dense" ToStringFunc="@(t => t == null ? "" : t.Name)">
+                                        @foreach (var type in _availableTypes.Where(t => GetCategoryForType(t.Id) == SelectedCategory))
                                         {
-                                            var t = _availableTypes.FirstOrDefault(x => x.Name == typeName);
-                                            if (t != null)
-                                            {
-                                                <MudSelectItem Value="@t">
-                                                    <div class="d-flex align-center"><MudIcon Icon="@GetIconForType(t.Name)" Size="Size.Small" Class="mr-3" Color="Color.Primary"/>@t.Name</div>
-                                                </MudSelectItem>
-                                            }
+                                            <MudSelectItem Value="@type">
+                                                <div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Label" Size="Size.Small" Class="mr-3" Color="Color.Primary"/>@type.Name</div>
+                                            </MudSelectItem>
                                         }
                                     </MudSelect>
                                 }
@@ -136,117 +109,136 @@
                     }
                 }
 
-                <!-- SCHRITT 2: STAMMDATEN & AUTO-TAG -->
                 @if (currentStepDef.Id == "Basics")
                 {
                     <div class="pdq-section-header">2. Basis-Informationen</div>
-                    
                     <MudGrid Spacing="2" Class="mb-6">
-                        <MudItem xs="12" md="8">
-                            <MudTextField @bind-Value="_newAsset.Name" Label="Bezeichnung / Hostname / Name *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
-                        </MudItem>
+                        <MudItem xs="12" md="8"><MudTextField @bind-Value="_newAsset.Name" Label="Bezeichnung / Name *" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
                         <MudItem xs="12" md="4">
-                            <!-- AUTO-TAG FELD -->
                             <MudTextField @bind-Value="_newAsset.AssetTag" Label="Asset-Tag (Auto-ID)" Variant="Variant.Filled" Margin="Margin.Dense" ReadOnly="true" 
-                                          Adornment="Adornment.End" AdornmentIcon="@(_isGeneratingTag ? "" : Icons.Material.Filled.AutoMode)"
-                                          Style="background-color: var(--mud-palette-background-grey); font-weight: bold; font-family: monospace;" />
-                            @if (_isGeneratingTag) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-1" /> }
+                                          Adornment="Adornment.End" AdornmentIcon="@(_isGeneratingTag ? "" : Icons.Material.Filled.AutoMode)" Style="background-color: var(--mud-palette-background-grey); font-weight: bold;" />
                         </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Guid?" Label="Hersteller" @bind-Value="_newAsset.ManufacturerId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                @foreach (var m in _manufacturers) { <MudSelectItem T="Guid?" Value="@m.Id">@m.Name</MudSelectItem> }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6"><MudTextField @bind-Value="_newAsset.SerialNumber" Label="Seriennummer (S/N)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     </MudGrid>
 
-                    <div class="pdq-section-header">Lebenszyklus</div>
+                    <div class="pdq-section-header">Lebenszyklus & Eigentümer</div>
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="6">
-                            <MudSelect T="string" Label="Status *" @bind-Value="_newAsset.LifecycleStatus" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" AnchorOrigin="Origin.BottomCenter">
-                                <MudSelectItem Value="@("In Planung")">In Planung</MudSelectItem>
-                                <MudSelectItem Value="@("Produktiv")">Produktiv</MudSelectItem>
-                                <MudSelectItem Value="@("Ausgemustert")">Ausgemustert</MudSelectItem>
+                            <!-- DYNAMISCHES STATUS DROPDOWN -->
+                            <MudSelect T="string" Label="Status *" @bind-Value="_newAsset.LifecycleStatus" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
+                                @foreach (var s in _lifecycleStatuses) {
+                                    <MudSelectItem Value="@s">@s</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Guid?" Label="Verantwortlicher" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                @foreach (var p in _persons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
                             </MudSelect>
                         </MudItem>
                     </MudGrid>
                 }
 
-                <!-- SCHRITT 3: DYNAMISCHE SPEZIFIKATIONEN -->
                 @if (currentStepDef.Id == "Specs")
                 {
-                    <div class="pdq-section-header">3. Details: @SelectedCategory (@_selectedType?.Name)</div>
+                    <div class="d-flex justify-space-between align-center mb-4">
+                        <div class="pdq-section-header ma-0">3. Spezifikationen: @(_selectedType?.Name)</div>
+                        <MudToggleIconButton @bind-Toggled="_editTemplateMode" Icon="@Icons.Material.Filled.Edit" ToggledIcon="@Icons.Material.Filled.EditOff" 
+                                             Color="Color.Default" ToggledColor="Color.Primary" Title="Vorlage anpassen" Size="Size.Small" />
+                    </div>
+                    
+                    var currentTemplate = _templates.FirstOrDefault(t => t.AssetTypeId == _selectedType?.Id);
 
-                    <MudGrid Spacing="2">
-                        @if (SelectedCategory == "Organization" || SelectedCategory == "Person")
-                        {
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynJobTitle" Label="Position / Rolle" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynDepartment" Label="Abteilung / Team" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynEmail" Label="E-Mail Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynPhone" Label="Telefonnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6">
-                                <MudSelect T="Guid?" Label="Vorgesetzter (Manager)" @bind-Value="_newAsset.OwnerId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true">
-                                    @foreach (var p in _persons) { <MudSelectItem T="Guid?" Value="@p.Id">@p.LastName, @p.FirstName</MudSelectItem> }
-                                </MudSelect>
-                            </MudItem>
-                        }
-                        else if (SelectedCategory == "Hardware")
-                        {
-                            <MudItem xs="12" md="6">
-                                <MudSelect T="Guid?" Label="Hersteller" @bind-Value="_newAsset.ManufacturerId" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" Clearable="true">
-                                    @foreach (var m in _manufacturers) { <MudSelectItem T="Guid?" Value="@m.Id">@m.Name</MudSelectItem> }
-                                </MudSelect>
-                            </MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_newAsset.SerialNumber" Label="Seriennummer (S/N)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynModel" Label="Modell" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynCpu" Label="CPU / Prozessor" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="6"><MudTextField @bind-Value="_dynRam" Label="RAM" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                        }
-                        else if (SelectedCategory == "License")
-                        {
-                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynLicenseType" Label="Vertragsart" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynSeats" Label="Anzahl Lizenzen (Seats)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                            <MudItem xs="12" md="4"><MudTextField @bind-Value="_dynRenewal" Label="Ablaufdatum" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
-                        }
-                        else
-                        {
-                            <MudItem xs="12"><MudTextField @bind-Value="_dynNotes" Label="Notizen" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" /></MudItem>
-                        }
-                    </MudGrid>
+                    if (_editTemplateMode && currentTemplate != null)
+                    {
+                        <div class="template-builder-box">
+                            <div class="d-flex align-center mb-2">
+                                <MudIcon Icon="@Icons.Material.Filled.SettingsApplications" Color="Color.Secondary" Class="mr-2" />
+                                <MudText Typo="Typo.subtitle2" Class="font-weight-bold">Vorlagen-Editor für '@(_selectedType?.Name)'</MudText>
+                                <MudSpacer />
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTemplatesToBackend">Layout Speichern</MudButton>
+                            </div>
+                            
+                            <MudGrid Spacing="2" Class="mb-4">
+                                <MudItem xs="5"><MudTextField @bind-Value="_newFieldName" Label="Neues Feld (Name)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                                <MudItem xs="4">
+                                    <MudSelect T="string" @bind-Value="_newFieldType" Label="Feld-Typ" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        <MudSelectItem Value="@("Text")">Text (Einzeilig)</MudSelectItem>
+                                        <MudSelectItem Value="@("Number")">Zahl</MudSelectItem>
+                                        <MudSelectItem Value="@("Date")">Datum</MudSelectItem>
+                                        <MudSelectItem Value="@("Boolean")">Ja / Nein</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="3" Class="d-flex align-center">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true" OnClick="AddFieldToTemplate">Hinzufügen</MudButton>
+                                </MudItem>
+                            </MudGrid>
+
+                            <MudDataGrid Items="@currentTemplate.Fields" Dense="true" Bordered="true" Elevation="0">
+                                <Columns>
+                                    <PropertyColumn Property="x => x.Name" Title="Feldname" />
+                                    <PropertyColumn Property="x => x.Type" Title="Datentyp" />
+                                    <TemplateColumn Title="Aktion" CellClass="d-flex justify-end">
+                                        <CellTemplate>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveFieldFromTemplate(currentTemplate, context.Item))" />
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                </Columns>
+                            </MudDataGrid>
+                        </div>
+                    }
+                    else if (currentTemplate != null && currentTemplate.Fields.Any())
+                    {
+                        <MudGrid Spacing="2">
+                            @foreach (var field in currentTemplate.Fields)
+                            {
+                                <MudItem xs="12" md="6">
+                                    @if (field.Type == "Text") {
+                                        <MudTextField T="string" Label="@field.Name" Value="@GetStringVal(field.Name)" ValueChanged="@(v => SetVal(field.Name, v))" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    } else if (field.Type == "Number") {
+                                        <MudNumericField T="int?" Label="@field.Name" Value="@GetIntVal(field.Name)" ValueChanged="@(v => SetVal(field.Name, v))" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    } else if (field.Type == "Date") {
+                                        <MudDatePicker Label="@field.Name" Date="@GetDateVal(field.Name)" DateChanged="@(v => SetVal(field.Name, v))" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    } else if (field.Type == "Boolean") {
+                                        <MudCheckBox T="bool" Label="@field.Name" Value="@GetBoolVal(field.Name)" ValueChanged="@(v => SetVal(field.Name, v))" Color="Color.Primary" />
+                                    }
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Diese Kategorie hat noch keine spezifischen Datenfelder. Klicken Sie oben rechts auf das Stift-Symbol, um Felder hinzuzufügen.</MudAlert>
+                    }
+                    
+                    <MudTextField @bind-Value="_dynNotes" Label="Allgemeine Notizen" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" Class="mt-4" />
                 }
 
-                <!-- SCHRITT 4: IPAM (NUR BEI NETZWERKGERÄTEN) -->
                 @if (currentStepDef.Id == "Network")
                 {
                     <div class="pdq-section-header">4. IPAM: Netzwerkschnittstellen</div>
-                    <MudText Typo="Typo.body2" Class="mb-6" Color="Color.Secondary">Weisen Sie diesem Gerät feste IP-Adressen aus verwalteten Subnetzen zu.</MudText>
-                    
                     <MudGrid Spacing="2" VerticalAlignment="VerticalAlignment.Bottom" Class="mb-6">
                         <MudItem xs="12" md="4">
-                            <MudSelect T="Guid?" Label="1. Subnetz wählen" @bind-Value="_selectedSubnetId" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                @foreach(var sub in _subnets) { <MudSelectItem T="Guid?" Value="@sub.Id">@sub.Name (@sub.NetworkAddress)</MudSelectItem> }
+                            <MudSelect T="Guid?" Label="1. Subnetz" @bind-Value="_selectedSubnetId" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach(var sub in _subnets) { <MudSelectItem T="Guid?" Value="@sub.Id">@sub.Name</MudSelectItem> }
                             </MudSelect>
                         </MudItem>
-                        <MudItem xs="12" md="4">
-                            <MudTextField @bind-Value="_newIpAddress" Label="2. IP-Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                        </MudItem>
-                        <MudItem xs="12" md="3">
-                            <MudTextField @bind-Value="_newMacAddress" Label="MAC-Adresse (Optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                        </MudItem>
-                        <MudItem xs="12" md="1">
-                            <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="AddInterface" />
-                        </MudItem>
+                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_newIpAddress" Label="2. IP-Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="_newMacAddress" Label="MAC-Adresse" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                        <MudItem xs="12" md="1"><MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="AddInterface" /></MudItem>
                     </MudGrid>
 
-                    <div class="pdq-section-header">Zugeordnete Interfaces</div>
                     <MudDataGrid Items="@_interfaces" Dense="true" Bordered="true" Elevation="0">
                         <Columns>
-                            <TemplateColumn Title="Subnetz">
-                                <CellTemplate>
-                                    @(_subnets.FirstOrDefault(s => s.Id == context.Item.SubnetId)?.Name)
-                                </CellTemplate>
-                            </TemplateColumn>
+                            <TemplateColumn Title="Subnetz"><CellTemplate>@(_subnets.FirstOrDefault(s => s.Id == context.Item.SubnetId)?.Name)</CellTemplate></TemplateColumn>
                             <PropertyColumn Property="x => x.Address" Title="IP-Adresse" />
                             <PropertyColumn Property="x => x.MacAddress" Title="MAC-Adresse" />
-                            <TemplateColumn Title="Aktion" CellClass="d-flex justify-end">
-                                <CellTemplate>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _interfaces.Remove(context.Item))" />
-                                </CellTemplate>
-                            </TemplateColumn>
+                            <TemplateColumn Title="Aktion" CellClass="d-flex justify-end"><CellTemplate><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _interfaces.Remove(context.Item))" /></CellTemplate></TemplateColumn>
                         </Columns>
                     </MudDataGrid>
                 }
@@ -265,58 +257,34 @@
     
     private bool _isLoading = true;
     private bool _isGeneratingTag = false;
+    private bool _editTemplateMode = false;
     
     private Asset _newAsset = new() { Name = "", LifecycleStatus = "Produktiv" };
-    
     private string _companyPrefix = "";
-    public string CompanyPrefix
-    {
-        get => _companyPrefix;
-        set {
-            if (_companyPrefix != value) {
-                _companyPrefix = value;
-                _ = TriggerTagGeneration(); 
-            }
-        }
-    }
+
+    public class TemplateField { public string Id { get; set; } = Guid.NewGuid().ToString(); public string Name { get; set; } = ""; public string Type { get; set; } = "Text"; }
+    public class TypeTemplate { public Guid AssetTypeId { get; set; } public string CategoryName { get; set; } = "Allgemein"; public List<TemplateField> Fields { get; set; } = new(); }
+    
+    private List<TypeTemplate> _templates = new();
+    private List<string> _categories = new();
+    private Dictionary<string, object> _dynamicData = new();
+    
+    private string _newFieldName = "";
+    private string _newFieldType = "Text";
+    private string _dynNotes = "";
+
+    // DYNAMISCHE STATUS WERTE
+    private List<string> _lifecycleStatuses = new() { "Produktiv", "Auf Lager", "Ausgemustert" };
+
+    public string CompanyPrefix { get => _companyPrefix; set { if (_companyPrefix != value) { _companyPrefix = value; _ = TriggerTagGeneration(); } } }
 
     private string _selectedCategory = "";
-    public string SelectedCategory
-    {
-        get => _selectedCategory;
-        set {
-            if (_selectedCategory != value) {
-                _selectedCategory = value;
-                if (!_isLoading) {
-                    _selectedType = null; 
-                    RebuildSteps(); 
-                }
-            }
-        }
-    }
+    public string SelectedCategory { get => _selectedCategory; set { if (_selectedCategory != value) { _selectedCategory = value; if (!_isLoading) { _selectedType = null; RebuildSteps(); } } } }
     
     private AssetType? _selectedType;
-    public AssetType? SelectedType
-    {
-        get => _selectedType;
-        set {
-            if (_selectedType != value) {
-                _selectedType = value;
-                _ = TriggerTagGeneration(); 
-            }
-        }
-    }
+    public AssetType? SelectedType { get => _selectedType; set { if (_selectedType != value) { _selectedType = value; _ = TriggerTagGeneration(); } } }
 
-    public Guid? SelectedLocationId
-    {
-        get => _newAsset.LocationId;
-        set {
-            if (_newAsset.LocationId != value) {
-                _newAsset.LocationId = value;
-                _ = TriggerTagGeneration(); 
-            }
-        }
-    }
+    public Guid? SelectedLocationId { get => _newAsset.LocationId; set { if (_newAsset.LocationId != value) { _newAsset.LocationId = value; _ = TriggerTagGeneration(); } } }
     
     private List<AssetType> _availableTypes = new();
     private List<Manufacturer> _manufacturers = new();
@@ -328,44 +296,45 @@
     private string _newIpAddress = "", _newMacAddress = "";
     private List<IpAddress> _interfaces = new();
 
-    private string _dynModel = "", _dynCpu = "", _dynRam = "";
-    private string _dynJobTitle = "", _dynDepartment = "", _dynEmail = "", _dynPhone = "";
-    private string _dynLicenseType = "", _dynSeats = "", _dynRenewal = "", _dynNotes = "";
-
-    private Dictionary<string, List<string>> _categoryMap = new()
-    {
-        { "Hardware", new() { "Laptop", "Desktop", "Rack-Server", "Core-Switch" } },
-        { "Network", new() { "Firewall", "Access-Point", "Router" } },
-        { "Storage", new() { "SAN-Storage", "NAS-System" } },
-        { "Cloud", new() { "Cloud-Instanz", "S3-Bucket" } },
-        { "Software", new() { "Betriebssystem", "MS-SQL-Server" } },
-        { "License", new() { "Software-Lizenz", "Wartungsvertrag" } },
-        { "Organization", new() { "Person", "Team", "Kostenstelle" } }
-    };
-
     protected override async Task OnInitializedAsync()
     {
         _isLoading = true;
         try
         {
-            try {
-                var schema = await Http.GetFromJsonAsync<JsonElement>("api/settings/assettag-schema");
-                _companyPrefix = schema.GetProperty("companyPrefix").GetString() ?? "";
-            } catch { }
-
+            try { var schema = await Http.GetFromJsonAsync<JsonElement>("api/settings/assettag-schema"); _companyPrefix = schema.GetProperty("companyPrefix").GetString() ?? ""; } catch { }
             try { _manufacturers = await Http.GetFromJsonAsync<List<Manufacturer>>("api/manufacturers") ?? new(); } catch {}
             try { _locations = await Http.GetFromJsonAsync<List<Location>>("api/locations") ?? new(); } catch {}
             try { _persons = await Http.GetFromJsonAsync<List<Person>>("api/persons") ?? new(); } catch {}
             try { _subnets = await Http.GetFromJsonAsync<List<Subnet>>("api/subnets") ?? new(); } catch {}
+            try { _availableTypes = await Http.GetFromJsonAsync<List<AssetType>>("api/assets/types") ?? new(); } catch { }
+
+            // Lade Templates aus DB
+            try { 
+                var tplStr = await Http.GetStringAsync("api/settings/dynamic/AssetTemplates");
+                if (!string.IsNullOrWhiteSpace(tplStr) && tplStr != "[]") {
+                    _templates = JsonSerializer.Deserialize<List<TypeTemplate>>(tplStr) ?? new();
+                }
+            } catch { }
             
+            // Lade Status Optionen
             try {
-                var assets = await Http.GetFromJsonAsync<List<Asset>>("api/assets");
-                if (assets != null) _availableTypes = assets.Where(a => a.AssetType != null).Select(a => a.AssetType!).GroupBy(t => t.Id).Select(g => g.First()).ToList();
+                var lifecycleDict = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle");
+                if (lifecycleDict != null && lifecycleDict.Any()) {
+                    _lifecycleStatuses = lifecycleDict.Values.SelectMany(v => v).Distinct().ToList();
+                }
             } catch { }
 
-            if (!_availableTypes.Any()) {
-                foreach(var list in _categoryMap.Values) foreach(var item in list) _availableTypes.Add(new AssetType { Id = Guid.NewGuid(), Name = item });
+            bool needsSave = false;
+            foreach (var type in _availableTypes) {
+                if (!_templates.Any(t => t.AssetTypeId == type.Id)) {
+                    var tpl = new TypeTemplate { AssetTypeId = type.Id, CategoryName = GuessCategory(type.Name) };
+                    _templates.Add(tpl);
+                    needsSave = true;
+                }
             }
+            if (needsSave) await SaveTemplatesToBackend();
+
+            _categories = _templates.Select(t => t.CategoryName).Distinct().OrderBy(c => c).ToList();
 
             if (IsEditMode)
             {
@@ -376,15 +345,15 @@
                     _interfaces = existing.NetworkInterfaces?.ToList() ?? new();
                     if (_newAsset.AssetType != null)
                     {
-                        var typeName = _newAsset.AssetType.Name;
-                        var categoryEntry = _categoryMap.FirstOrDefault(kvp => kvp.Value.Contains(typeName));
-                        if (categoryEntry.Key != null)
-                        {
-                            _selectedCategory = categoryEntry.Key;
-                            _selectedType = _availableTypes.FirstOrDefault(t => t.Id == _newAsset.AssetTypeId);
-                        }
+                        _selectedType = _availableTypes.FirstOrDefault(t => t.Id == _newAsset.AssetTypeId);
+                        _selectedCategory = GetCategoryForType(_newAsset.AssetTypeId);
                     }
+                    LoadDynamicData();
                 }
+            }
+            
+            if (!_lifecycleStatuses.Contains(_newAsset.LifecycleStatus)) {
+                _newAsset.LifecycleStatus = _lifecycleStatuses.FirstOrDefault() ?? "Produktiv";
             }
             
             RebuildSteps();
@@ -392,63 +361,91 @@
         finally { _isLoading = false; }
     }
 
+    private string GuessCategory(string typeName) {
+        if (new[]{"Laptop","Desktop","Workstation","Tablet","Smartphone","Rack-Server"}.Any(x => typeName.Contains(x))) return "Hardware";
+        if (new[]{"Switch","Router","Firewall","Access-Point"}.Any(x => typeName.Contains(x))) return "Netzwerk";
+        if (new[]{"Storage","NAS","SAN"}.Any(x => typeName.Contains(x))) return "Storage";
+        if (new[]{"Betriebssystem","Software","SQL","Datenbank"}.Any(x => typeName.Contains(x))) return "Software";
+        return "Allgemein";
+    }
+
+    private string GetCategoryForType(Guid id) => _templates.FirstOrDefault(t => t.AssetTypeId == id)?.CategoryName ?? "Allgemein";
+
+    private async Task SaveTemplatesToBackend() {
+        try {
+            await Http.PostAsJsonAsync("api/settings/dynamic/AssetTemplates", _templates);
+            Snackbar.Add("Vorlagen-Layout gespeichert.", Severity.Success);
+            _editTemplateMode = false;
+        } catch { Snackbar.Add("Fehler beim Speichern der Vorlage.", Severity.Error); }
+    }
+
+    private void AddFieldToTemplate() {
+        if (string.IsNullOrWhiteSpace(_newFieldName) || _selectedType == null) return;
+        var tpl = _templates.FirstOrDefault(t => t.AssetTypeId == _selectedType.Id);
+        if (tpl != null) {
+            tpl.Fields.Add(new TemplateField { Name = _newFieldName, Type = _newFieldType });
+            _newFieldName = "";
+        }
+    }
+
+    private void RemoveFieldFromTemplate(TypeTemplate tpl, TemplateField f) => tpl.Fields.Remove(f);
+
+    private string GetStringVal(string key) => _dynamicData.TryGetValue(key, out var val) ? val?.ToString() ?? "" : "";
+    private int? GetIntVal(string key) => _dynamicData.TryGetValue(key, out var val) && val is JsonElement je && je.TryGetInt32(out int i) ? i : (val is int intVal ? intVal : null);
+    private DateTime? GetDateVal(string key) => _dynamicData.TryGetValue(key, out var val) && val is JsonElement je && je.TryGetDateTime(out DateTime dt) ? dt : (val is DateTime dateVal ? dateVal : null);
+    private bool GetBoolVal(string key) => _dynamicData.TryGetValue(key, out var val) && val is JsonElement je && (je.ValueKind == JsonValueKind.True || je.ValueKind == JsonValueKind.False) ? je.GetBoolean() : (val is bool b ? b : false);
+
+    private void SetVal(string key, object? val) { if (val != null) _dynamicData[key] = val; else _dynamicData.Remove(key); }
+
+    private void LoadDynamicData() {
+        if (string.IsNullOrWhiteSpace(_newAsset.DynamicDataJson)) return;
+        try {
+            using var doc = JsonDocument.Parse(_newAsset.DynamicDataJson);
+            if (doc.RootElement.TryGetProperty("General", out var gen) && gen.TryGetProperty("Notes", out var n)) _dynNotes = n.GetString() ?? "";
+            
+            if (doc.RootElement.TryGetProperty("CustomFields", out var cf)) {
+                foreach (var prop in cf.EnumerateObject()) {
+                    _dynamicData[prop.Name] = prop.Value;
+                }
+            }
+        } catch { }
+    }
+
     private void RebuildSteps()
     {
         ActiveSteps.Clear();
         ActiveSteps.Add(new WizardStep { Id = "Category", Name = "Vorlage", Icon = Icons.Material.Filled.Category });
         ActiveSteps.Add(new WizardStep { Id = "Basics", Name = "Stammdaten", Icon = Icons.Material.Filled.Info });
-        ActiveSteps.Add(new WizardStep { Id = "Specs", Name = "Details", Icon = Icons.Material.Filled.Settings });
+        ActiveSteps.Add(new WizardStep { Id = "Specs", Name = "Spezifikationen", Icon = Icons.Material.Filled.DisplaySettings });
         
-        if (SelectedCategory is "Hardware" or "Network" or "Storage")
-        {
+        if (SelectedCategory is "Hardware" or "Netzwerk" or "Storage" or "Datacenter")
             ActiveSteps.Add(new WizardStep { Id = "Network", Name = "IPAM", Icon = Icons.Material.Filled.Lan });
-        }
-        
+            
         if (_currentStepIndex >= ActiveSteps.Count) _currentStepIndex = ActiveSteps.Count > 0 ? ActiveSteps.Count - 1 : 0;
         StateHasChanged();
     }
 
-    private async Task TriggerTagGeneration()
-    {
-        if (IsEditMode) return; 
-        if (_selectedType == null) return;
-
-        _isGeneratingTag = true;
-        StateHasChanged();
-
+    private async Task TriggerTagGeneration() {
+        if (IsEditMode || _selectedType == null) return;
+        _isGeneratingTag = true; StateHasChanged();
         try {
             string locQuery = _newAsset.LocationId.HasValue ? $"&locationId={_newAsset.LocationId.Value}" : "";
             var res = await Http.GetFromJsonAsync<JsonElement>($"api/assets/generate-tag?company={_companyPrefix}&typeId={_selectedType.Id}{locQuery}");
-            if (res.TryGetProperty("tag", out var t)) {
-                _newAsset.AssetTag = t.GetString();
-            }
-        } 
-        catch { }
-        finally { 
-            _isGeneratingTag = false; 
-            StateHasChanged(); 
-        }
+            if (res.TryGetProperty("tag", out var t)) _newAsset.AssetTag = t.GetString();
+        } catch { } finally { _isGeneratingTag = false; StateHasChanged(); }
     }
 
     private void NextStep() { if (_currentStepIndex < ActiveSteps.Count - 1) _currentStepIndex++; }
     private void PrevStep() { if (_currentStepIndex > 0) _currentStepIndex--; }
 
-    private bool CanProceed()
-    {
-        // Guard Clause: Falls noch keine Schritte definiert sind (während des Ladens), Button deaktivieren
-        if (ActiveSteps == null || ActiveSteps.Count == 0 || _currentStepIndex < 0 || _currentStepIndex >= ActiveSteps.Count)
-        {
-            return false;
-        }
-
+    private bool CanProceed() {
+        if (ActiveSteps == null || ActiveSteps.Count == 0 || _currentStepIndex < 0 || _currentStepIndex >= ActiveSteps.Count) return false;
         if (ActiveSteps[_currentStepIndex].Id == "Category") return _selectedType != null && !string.IsNullOrWhiteSpace(_companyPrefix);
         if (ActiveSteps[_currentStepIndex].Id == "Basics") return !string.IsNullOrWhiteSpace(_newAsset.Name) && !string.IsNullOrWhiteSpace(_newAsset.LifecycleStatus);
-        
         return true; 
     }
 
-    private void AddInterface()
-    {
+    private void AddInterface() {
         if (_selectedSubnetId.HasValue && !string.IsNullOrWhiteSpace(_newIpAddress)) {
             _interfaces.Add(new IpAddress { Address = _newIpAddress, MacAddress = _newMacAddress, SubnetId = _selectedSubnetId.Value });
             _newIpAddress = ""; _newMacAddress = "";
@@ -461,37 +458,21 @@
         _newAsset.AssetType = _selectedType;
 
         var dynamicObj = new Dictionary<string, object>();
-        if (SelectedCategory == "Organization") dynamicObj.Add("Contact", new { Title = _dynJobTitle, Department = _dynDepartment, Email = _dynEmail, Phone = _dynPhone });
-        if (SelectedCategory == "Hardware") dynamicObj.Add("System", new { Model = _dynModel });
-        if (SelectedCategory == "Hardware") dynamicObj.Add("Hardware", new { CPU = _dynCpu, RAM = _dynRam });
-        if (SelectedCategory == "License") dynamicObj.Add("Contract", new { Type = _dynLicenseType, Seats = _dynSeats, Renewal = _dynRenewal });
+        if (!string.IsNullOrWhiteSpace(_dynNotes)) dynamicObj.Add("General", new { Notes = _dynNotes });
+        dynamicObj.Add("CustomFields", _dynamicData);
         
         _newAsset.DynamicDataJson = JsonSerializer.Serialize(dynamicObj);
         _newAsset.NetworkInterfaces = _interfaces;
 
-        try
-        {
-            HttpResponseMessage response = IsEditMode 
-                ? await Http.PutAsJsonAsync($"api/assets/{Id}", _newAsset)
-                : await Http.PostAsJsonAsync("api/assets", _newAsset);
-
-            if (response.IsSuccessStatusCode)
-            {
+        try {
+            HttpResponseMessage response = IsEditMode ? await Http.PutAsJsonAsync($"api/assets/{Id}", _newAsset) : await Http.PostAsJsonAsync("api/assets", _newAsset);
+            if (response.IsSuccessStatusCode) {
                 Snackbar.Add(IsEditMode ? "Asset aktualisiert!" : "Asset angelegt!", Severity.Success);
                 if (IsEditMode) Nav.NavigateTo($"/assets/{Id}");
-                else {
-                    var created = await response.Content.ReadFromJsonAsync<Asset>();
-                    Nav.NavigateTo(created != null ? $"/assets/{created.Id}" : "/assets");
-                }
+                else { var created = await response.Content.ReadFromJsonAsync<Asset>(); Nav.NavigateTo(created != null ? $"/assets/{created.Id}" : "/assets"); }
             }
-            else
-            {
-                var err = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Fehler: {err}", Severity.Error);
-            }
+            else { var err = await response.Content.ReadAsStringAsync(); Snackbar.Add($"Fehler: {err}", Severity.Error); }
         }
         catch (Exception ex) { Snackbar.Add($"API Fehler: {ex.Message}", Severity.Error); }
     }
-
-    private string GetIconForType(string type) => Icons.Material.Filled.Computer;
 }

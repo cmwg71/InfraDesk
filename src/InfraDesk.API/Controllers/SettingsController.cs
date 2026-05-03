@@ -3,7 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using InfraDesk.Infrastructure.Persistence;
 using InfraDesk.Core.Entities;
+using InfraDesk.Core.Common;
 using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace InfraDesk.API.Controllers;
 
@@ -13,44 +18,39 @@ public class SettingsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
 
-    private readonly Dictionary<string, List<string>> _defaultLifecycle = new()
-    {
-        { "Planung", new List<string> { "In Evaluierung", "Budgetiert", "Bestellt" } },
-        { "Lager", new List<string> { "Auf Lager", "Ersatzteil", "Defekt" } },
-        { "Produktiv", new List<string> { "Aktiv", "Wartung", "Gesperrt" } },
-        { "End of Life", new List<string> { "Ausgemustert", "Verkauft", "Verschrottet" } }
-    };
-
     public SettingsController(ApplicationDbContext context)
     {
         _context = context;
     }
 
-    [HttpGet("asset-lifecycle")]
-    public async Task<ActionResult<Dictionary<string, List<string>>>> GetLifecycle()
+    [HttpGet("timezones")]
+    public ActionResult<IEnumerable<string>> GetTimeZones()
     {
-        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
-        if (setting != null && !string.IsNullOrWhiteSpace(setting.Value))
-        {
-            try
-            {
-                var config = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(setting.Value);
-                if (config != null) return Ok(config);
-            }
-            catch { }
-        }
-        return Ok(_defaultLifecycle);
+        return Ok(TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(id => id).ToList());
     }
 
-    [HttpPost("asset-lifecycle")]
-    public async Task<ActionResult> SaveLifecycle([FromBody] Dictionary<string, List<string>> config)
+    // FIX: Fehlender Endpunkt, der den 404-Fehler und Absturz verursacht hat.
+    // WICHTIG: Gibt application/json zurück, damit Blazor es direkt verarbeiten kann.
+    [HttpGet("dynamic/{key}")]
+    public async Task<IActionResult> GetGenericSetting(string key)
     {
-        var json = JsonSerializer.Serialize(config);
-        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "AssetLifecycle");
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(x => x.Key == key);
+        return Content(setting?.Value ?? "{}", "application/json");
+    }
 
-        if (setting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "AssetLifecycle", Value = json });
-        else setting.Value = json;
-
+    // FIX: Endpunkt zum Speichern der dynamischen Listen (Status, Prioritäten, Vorlagen)
+    [HttpPost("dynamic/{key}")]
+    public async Task<ActionResult> SaveGenericSetting(string key, [FromBody] JsonElement value)
+    {
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(x => x.Key == key);
+        if (setting == null)
+        {
+            _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = key, Value = value.GetRawText() });
+        }
+        else
+        {
+            setting.Value = value.GetRawText();
+        }
         await _context.SaveChangesAsync();
         return Ok();
     }
@@ -58,88 +58,86 @@ public class SettingsController : ControllerBase
     [HttpGet("masterdata")]
     public async Task<ActionResult<MasterDataDto>> GetMasterData()
     {
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "MasterData");
         var dto = new MasterDataDto();
 
-        var tenant = await _context.Tenants.FirstOrDefaultAsync();
-        if (tenant != null)
-        {
-            dto.CompanyName = tenant.Name;
-            dto.Domain = tenant.Domain ?? "";
-        }
-
-        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
-        dto.CompanyPrefix = prefixSetting?.Value ?? "";
-
-        // Zeitzone laden
-        var tzSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "SystemTimeZone");
-        dto.TimeZoneId = tzSetting?.Value ?? "W. Europe Standard Time";
-
-        var addressSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "HQAddress");
-        if (addressSetting != null && !string.IsNullOrWhiteSpace(addressSetting.Value))
+        if (setting != null)
         {
             try
             {
-                using var doc = JsonDocument.Parse(addressSetting.Value);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("Street", out var st)) dto.Street = st.GetString() ?? "";
-                if (root.TryGetProperty("ZipCity", out var zc)) dto.ZipCity = zc.GetString() ?? "";
-                if (root.TryGetProperty("State", out var stt)) dto.State = stt.GetString() ?? "";
-                if (root.TryGetProperty("Country", out var c)) dto.Country = c.GetString() ?? "";
+                // Versuche, die Settings zu laden.
+                dto = JsonSerializer.Deserialize<MasterDataDto>(setting.Value) ?? new MasterDataDto();
             }
-            catch { }
+            catch
+            {
+                // Fallback: Falls sich die Struktur in der Datenbank geändert hat (z.B. alter String vs. neue List<T>),
+                // fangen wir den Fehler ab und nutzen die Standardwerte aus dem neuen Dto.
+            }
         }
 
+        var admin = await _context.Persons.FirstOrDefaultAsync(p => p.SystemRole == "Global Admin");
+        if (admin != null)
+        {
+            dto.AdminFirstName = admin.FirstName;
+            dto.AdminLastName = admin.LastName;
+            dto.AdminEmail = admin.Email ?? "";
+        }
         return Ok(dto);
     }
 
     [HttpPost("masterdata")]
     public async Task<ActionResult> SaveMasterData([FromBody] MasterDataDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.CompanyName) || string.IsNullOrWhiteSpace(dto.CompanyPrefix) || string.IsNullOrWhiteSpace(dto.ZipCity))
-        {
-            return BadRequest("Firmenname, Kürzel und PLZ/Ort sind Pflichtfelder.");
-        }
+        var setting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "MasterData");
 
-        var tenant = await _context.Tenants.FirstOrDefaultAsync();
-        if (tenant == null)
+        var jsonDto = new MasterDataDto
         {
-            tenant = new Tenant { Id = Guid.NewGuid(), Name = dto.CompanyName, Domain = dto.Domain };
-            _context.Tenants.Add(tenant);
-        }
+            CompanyName = dto.CompanyName,
+            CompanyPrefix = dto.CompanyPrefix,
+            Domain = dto.Domain,
+            Street = dto.Street,
+            ZipCity = dto.ZipCity,
+            State = dto.State,
+            Country = dto.Country,
+            TimeZoneId = dto.TimeZoneId,
+            AssetTagPattern = dto.AssetTagPattern,
+            BarcodeType = dto.BarcodeType,
+            ShowTextBelowBarcode = dto.ShowTextBelowBarcode,
+            QrErrorCorrection = dto.QrErrorCorrection,
+            LabelWidth = dto.LabelWidth,
+            LabelHeight = dto.LabelHeight,
+            LabelTemplate = dto.LabelTemplate,
+            IncludeLogoInQr = dto.IncludeLogoInQr,
+            PrintAssetName = dto.PrintAssetName,
+            PrintCompanyName = dto.PrintCompanyName,
+            PrintSerialNumber = dto.PrintSerialNumber,
+            PrintResolutionDpi = dto.PrintResolutionDpi,
+            TicketDefaultFilter = dto.TicketDefaultFilter,
+            TicketShowClosed = dto.TicketShowClosed,
+            TicketStatusList = dto.TicketStatusList, // Nun strukturierte Listen (Name, Farbe, Icon)
+            TicketPriorityList = dto.TicketPriorityList
+        };
+
+        string jsonString = JsonSerializer.Serialize(jsonDto);
+        if (setting == null)
+            _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "MasterData", Value = jsonString });
         else
+            setting.Value = jsonString;
+
+        // Admin-Account aktualisieren
+        var admin = await _context.Persons.FirstOrDefaultAsync(p => p.SystemRole == "Global Admin");
+        if (admin != null)
         {
-            tenant.Name = dto.CompanyName;
-            tenant.Domain = dto.Domain;
+            admin.FirstName = dto.AdminFirstName; admin.LastName = dto.AdminLastName; admin.Email = dto.AdminEmail;
+            if (!string.IsNullOrWhiteSpace(dto.AdminPassword)) admin.PasswordHash = SecurityHelper.HashPassword(dto.AdminPassword);
         }
 
-        // Zeitzone speichern
-        var tzSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "SystemTimeZone");
-        if (tzSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "SystemTimeZone", Value = dto.TimeZoneId });
-        else tzSetting.Value = dto.TimeZoneId;
+        // Setup-Status updaten
+        var setupCompleteSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "IsSetupComplete");
+        if (setupCompleteSetting != null) setupCompleteSetting.Value = "true";
 
-        string cleanPrefix = dto.CompanyPrefix.Substring(0, Math.Min(3, dto.CompanyPrefix.Length)).ToUpper();
-        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
-        if (prefixSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "CompanyPrefix", Value = cleanPrefix });
-        else prefixSetting.Value = cleanPrefix;
-
-        var addressJson = JsonSerializer.Serialize(new { dto.Street, dto.ZipCity, dto.State, dto.Country });
-        var addrSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "HQAddress");
-        if (addrSetting == null) _context.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = "HQAddress", Value = addressJson });
-        else addrSetting.Value = addressJson;
-
-        var hqName = $"HQ {dto.ZipCity.Split(' ').LastOrDefault()}".Trim();
-        var hqAddressString = $"{dto.Street}, {dto.ZipCity}, {dto.State}, {dto.Country}".Trim().Trim(',').Trim();
-
-        var hqLoc = await _context.Locations.FirstOrDefaultAsync(l => l.Name.StartsWith("HQ") || l.Name.Contains("Zentrale"));
-        if (hqLoc == null)
-        {
-            _context.Locations.Add(new Location { Id = Guid.NewGuid(), TenantId = tenant.Id, Name = hqName, Address = hqAddressString });
-        }
-        else
-        {
-            hqLoc.Name = hqName;
-            hqLoc.Address = hqAddressString;
-        }
+        var initPw = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "InitialSetup_Password");
+        if (initPw != null) _context.SystemSettings.Remove(initPw);
 
         await _context.SaveChangesAsync();
         return Ok();
@@ -148,35 +146,72 @@ public class SettingsController : ControllerBase
     [HttpGet("assettag-schema")]
     public async Task<ActionResult<object>> GetAssetTagSchema()
     {
-        var prefixSetting = await _context.SystemSettings.FirstOrDefaultAsync(s => s.Key == "CompanyPrefix");
-        string prefix = prefixSetting != null ? prefixSetting.Value : "";
-
-        return Ok(new
-        {
-            CompanyPrefix = prefix,
-            FormatInfo = "{Company(3)} - {Standort(3)} - {Kategorie(3)} - {Zähler(5)}"
-        });
+        var s = await _context.SystemSettings.FirstOrDefaultAsync(x => x.Key == "MasterData");
+        var dto = s != null ? JsonSerializer.Deserialize<MasterDataDto>(s.Value) ?? new MasterDataDto() : new MasterDataDto();
+        return Ok(new { companyPrefix = dto.CompanyPrefix });
     }
+}
 
-    [HttpGet("timezones")]
-    public ActionResult<IEnumerable<string>> GetTimeZones()
-    {
-        return Ok(TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).OrderBy(id => id).ToList());
-    }
+// --- NEUE STRUKTUREN FÜR FARBEN & ICONS ---
+public class TicketStatusItem
+{
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#757575";
+    public string Icon { get; set; } = "Adjust";
+}
+
+public class TicketPriorityItem
+{
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#333333";
+    public string Icon { get; set; } = "Flag";
 }
 
 public class MasterDataDto
 {
     public string CompanyName { get; set; } = "";
-    public string Domain { get; set; } = "";
     public string CompanyPrefix { get; set; } = "";
-    public string Country { get; set; } = "";
-    public string State { get; set; } = "";
-    public string ZipCity { get; set; } = "";
+    public string Domain { get; set; } = "";
     public string Street { get; set; } = "";
+    public string ZipCity { get; set; } = "";
+    public string State { get; set; } = "";
+    public string Country { get; set; } = "";
     public string TimeZoneId { get; set; } = "W. Europe Standard Time";
+    public string AssetTagPattern { get; set; } = "{COMP}-{LOC}-{CAT}-{NUM:5}";
+    public string BarcodeType { get; set; } = "Code128";
+    public bool ShowTextBelowBarcode { get; set; } = true;
+    public string QrErrorCorrection { get; set; } = "M";
+    public int LabelWidth { get; set; } = 50;
+    public int LabelHeight { get; set; } = 30;
+    public string LabelTemplate { get; set; } = "Custom";
+    public bool IncludeLogoInQr { get; set; } = false;
+    public bool PrintAssetName { get; set; } = true;
+    public bool PrintCompanyName { get; set; } = true;
+    public bool PrintSerialNumber { get; set; } = false;
+    public int PrintResolutionDpi { get; set; } = 300;
+    public string AdminFirstName { get; set; } = "System";
+    public string AdminLastName { get; set; } = "Administrator";
+    public string AdminEmail { get; set; } = "admin@infradesk.local";
+    public string AdminPassword { get; set; } = "";
 
-    public bool IsSetupComplete => !string.IsNullOrWhiteSpace(CompanyName)
-                                && !string.IsNullOrWhiteSpace(CompanyPrefix)
-                                && !string.IsNullOrWhiteSpace(ZipCity);
+    // Ticket Settings
+    public string TicketDefaultFilter { get; set; } = "Alle";
+    public bool TicketShowClosed { get; set; } = false;
+
+    // Ersetzt die alten "OFFEN,AKTIV"-Strings durch strukturierte Listen
+    public List<TicketStatusItem> TicketStatusList { get; set; } = new()
+    {
+        new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" },
+        new TicketStatusItem { Name = "BEANTWORTET", Color = "#1976D2", Icon = "Reply" },
+        new TicketStatusItem { Name = "AKTIV", Color = "#C62828", Icon = "PlayArrow" },
+        new TicketStatusItem { Name = "GESCHLOSSEN", Color = "#757575", Icon = "CheckCircle" }
+    };
+
+    public List<TicketPriorityItem> TicketPriorityList { get; set; } = new()
+    {
+        new TicketPriorityItem { Name = "Niedrig", Color = "#757575", Icon = "ArrowDownward" },
+        new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" },
+        new TicketPriorityItem { Name = "Hoch", Color = "#C62828", Icon = "ArrowUpward" },
+        new TicketPriorityItem { Name = "Kritisch", Color = "#B71C1C", Icon = "Warning" }
+    };
 }

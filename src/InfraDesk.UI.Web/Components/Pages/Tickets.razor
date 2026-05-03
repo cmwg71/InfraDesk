@@ -5,28 +5,28 @@
 @using MudBlazor
 @using InfraDesk.UI.Web.Services
 @using System.Text.Json
-@using System.Text.Json.Serialization
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject ThemeService ThemeService
 @inject ISnackbar Snackbar
+@inject InfraDeskAuthStateProvider AuthStateProvider
 
 <PageTitle>InfraDesk - Ticket-Queue</PageTitle>
 
 <style>
-    .pdq-container { background-color: #fff; height: calc(100vh - 100px); display: flex; flex-direction: row; }
+    .pdq-container { background-color: #fff; height: calc(100vh - 110px); display: flex; flex-direction: row; }
     .pdq-sidebar { width: 240px; border-right: 1px solid #ccc; background-color: #f0f0f0; overflow-y: auto; flex-shrink: 0; }
     .pdq-content { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 12px 20px; }
     .pdq-toolbar { height: 42px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 12px; }
-    .sidebar-active { background-color: #fff !important; font-weight: bold; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-primary) !important; }
-    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 8px; margin-top: 16px; }
     
-    .status-badge { font-weight: 800; font-size: 0.75rem; }
-    .status-offen { color: #2E7D32; }
-    .status-beantwortet { color: #1976D2; }
-    .status-warten { color: #E65100; }
-    .status-aktiv { color: #C62828; }
-    .import-btn-wrapper { margin: 0; padding: 0; display: flex; align-items: center; }
+    .pdq-section-header { background-color: #e0e0e0; padding: 4px 12px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; color: #333; margin-bottom: 0; margin-top: 16px; }
+    .pdq-section-header:first-child { margin-top: 0; border-top: none; }
+    
+    .sidebar-item { padding: 8px 16px; display: flex; align-items: center; border-bottom: 1px solid #e8e8e8; color: #555; cursor: pointer; transition: background-color 0.2s; font-size: 0.85rem; }
+    .sidebar-item:hover { background-color: #e6e6e6; }
+    .sidebar-item.sidebar-active { background-color: #fff; border-left: 4px solid var(--mud-palette-primary); font-weight: bold; color: var(--mud-palette-primary); }
+
+    .mud-table-root .mud-table-body .mud-table-row:hover { cursor: pointer; }
 </style>
 
 <div class="pdq-toolbar">
@@ -34,258 +34,269 @@
     <MudText Typo="Typo.body2" Class="font-weight-bold">Service-Desk: @(_activeFilter ?? "Alle Tickets")</MudText>
     <MudSpacer />
     
-    @if (_selectedItems != null && _selectedItems.Count > 1)
-    {
+    @if (_selectedItems != null && _selectedItems.Count > 1) {
         <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Style="text-transform:none; margin-right: 16px;" OnClick="@(() => _mergeDialogVisible = true)">
             Zusammenführen (@_selectedItems.Count)
         </MudButton>
     }
-
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Style="text-transform:none" OnClick="@(() => Nav.NavigateTo("/tickets/create"))">Neues Ticket</MudButton>
 </div>
 
 <div class="pdq-container">
     <div class="pdq-sidebar">
-        <MudNavMenu Margin="Margin.Dense" Rounded="false">
-            <div class="pdq-section-header" style="margin-top: 0; border-top: none;">Ansichten</div>
-            <MudNavLink OnClick="@(() => SetFilter(null))" Class="@(string.IsNullOrEmpty(_activeFilter) ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.List">Alle Tickets</MudNavLink>
-            <MudNavLink OnClick="@(() => SetFilter("Meins"))" Class="@(_activeFilter == "Meins" ? "sidebar-active" : "")" Icon="@Icons.Material.Filled.Person">Meine Tickets</MudNavLink>
+        <div class="pdq-section-header">Ansichten</div>
+        <div class="sidebar-item @(string.IsNullOrEmpty(_activeFilter) || _activeFilter == "Alle" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Alle"))">
+            <MudIcon Icon="@Icons.Material.Filled.List" Size="Size.Small" Class="mr-3" />Alle Tickets
+        </div>
+        <div class="sidebar-item @(_activeFilter == "Meins" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Meins"))">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-3" />Meine Tickets
+        </div>
+        <div class="sidebar-item @(_activeFilter == "NichtZugewiesen" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("NichtZugewiesen"))">
+            <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Class="mr-3" />Nicht zugewiesen
+        </div>
 
-            <div class="pdq-section-header">Status Filter</div>
-            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Success">Offen</MudNavLink>
-            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Info">In Bearbeitung</MudNavLink>
-        </MudNavMenu>
+        <!-- DYNAMISCHER STATUS FILTER -->
+        <div class="pdq-section-header">Status Filter</div>
+        @foreach(var status in _ticketStatuses)
+        {
+            <div class="sidebar-item @(_activeFilter == status.Name ? "sidebar-active" : "")" @onclick="@(() => SetFilter(status.Name))">
+                <MudIcon Icon="@GetDynamicIcon(status.Icon)" Size="Size.Small" Class="mr-3" Style="@($"color: {status.Color}")" />
+                <span style="font-weight: 800; font-size: 0.75rem; color: @status.Color;">@status.Name.ToUpper()</span>
+            </div>
+        }
+        
+        <!-- DYNAMISCHER PRIORITÄT FILTER -->
+        <div class="pdq-section-header">Priorität Filter</div>
+        @foreach(var prio in _ticketPriorities)
+        {
+            <div class="sidebar-item @(_activeFilter == prio.Name ? "sidebar-active" : "")" @onclick="@(() => SetFilter(prio.Name))">
+                <MudIcon Icon="@GetDynamicIcon(prio.Icon)" Size="Size.Small" Class="mr-3" Style="@($"color: {prio.Color}")" />
+                <span style="font-weight: 800; font-size: 0.75rem; color: @prio.Color;">@prio.Name.ToUpper()</span>
+            </div>
+        }
+
+        <div class="pdq-section-header">ITIL Filter & Legende</div>
+        <div class="sidebar-item @(_activeFilter == "Incident (Störung)" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Incident (Störung)"))">
+            <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Error" Size="Size.Small" Class="mr-3" />Incident (Störung)
+        </div>
+        <div class="sidebar-item @(_activeFilter == "Service Request (Serviceanfrage)" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Service Request (Serviceanfrage)"))">
+            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Color="Color.Info" Size="Size.Small" Class="mr-3" />Service Request
+        </div>
+        <div class="sidebar-item @(_activeFilter == "Problem (Problem)" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Problem (Problem)"))">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Dark" Size="Size.Small" Class="mr-3" />Problem
+        </div>
+        <div class="sidebar-item @(_activeFilter == "Change (Änderung)" ? "sidebar-active" : "")" @onclick="@(() => SetFilter("Change (Änderung)"))">
+            <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Warning" Size="Size.Small" Class="mr-3" />Change
+        </div>
     </div>
 
     <div class="pdq-content">
         @if (_tickets == null) {
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            <div class="d-flex justify-center align-center" style="height: 200px;"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
         } else {
             <MudDataGrid T="Ticket" Items="@FilteredTickets" Dense="true" Bordered="true" Hover="true" Elevation="0" 
-                         MultiSelection="true" @bind-SelectedItems="_selectedItems" Filterable="true">
+                         MultiSelection="true" @bind-SelectedItems="_selectedItems" Filterable="true" RowClick="@OnRowClicked">
                 <ToolBarContent>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_searchString" Placeholder="Suche..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0 mr-4" Style="max-width: 300px;" />
+                    
+                    <MudSwitch T="bool" @bind-Value="_showClosed" Label="Geschlossene einblenden" Color="Color.Primary" Class="mt-1 mr-4" />
+                    
+                    <MudTextField @bind-Value="_searchString" Placeholder="Suche nach Titel oder Nummer..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Margin="Margin.Dense" Class="mt-0 mr-4" Style="max-width: 300px;" />
+
+                    <MudTooltip Text="Spalten anpassen">
+                        <MudMenu Icon="@Icons.Material.Filled.ViewColumn" 
+                                 Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" 
+                                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" 
+                                 Dense="true" AutoClose="false" Class="mr-2">
+                            <div class="pa-4" style="min-width: 280px;">
+                                <MudText Typo="Typo.subtitle2" Class="mb-3 font-weight-bold">Sichtbare Spalten</MudText>
+                                @foreach (var col in _columns.OrderBy(c => c.Order))
+                                {
+                                    <div class="d-flex align-center mb-1">
+                                        <MudCheckBox T="bool" Value="@col.Visible" ValueChanged="@(v => { col.Visible = v; StateHasChanged(); })" Label="@col.Title" Dense="true" Class="mr-auto" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" OnClick="@(() => MoveColUp(col))" Disabled="@(col.Order == 1)" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" OnClick="@(() => MoveColDown(col))" Disabled="@(col.Order == _columns.Count)" />
+                                    </div>
+                                }
+                            </div>
+                        </MudMenu>
+                    </MudTooltip>
 
                     <MudTooltip Text="Als CSV exportieren">
                         <MudIconButton Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" OnClick="ExportCsv" Class="mr-2" />
                     </MudTooltip>
                     
-                    <div class="import-btn-wrapper">
-                        <!-- Nativer Blazor InputFile (Bulletproof-Lösung) -->
+                    <div class="import-btn-wrapper" style="display: inline-flex; align-items: center;">
                         <MudTooltip Text="Aus CSV importieren">
                             <MudIconButton HtmlTag="label" for="import-csv-tickets" Icon="@Icons.Material.Filled.FileUpload" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" />
                         </MudTooltip>
                         <InputFile id="import-csv-tickets" OnChange="@ImportCsv" accept=".csv" style="display: none;" />
                     </div>
                 </ToolBarContent>
+                
                 <Columns>
                     <SelectColumn T="Ticket" />
                     
-                    <PropertyColumn Property="@(x => x.Category1)" Title="ITIL Typ" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
-                        <CellTemplate>
-                            <MudChip T="string" Size="Size.Small" Icon="@GetItilIcon(context.Item.Category1)" Color="@GetItilColor(context.Item.Category1)" Variant="Variant.Outlined" Class="font-weight-bold ma-0">
-                                @(context.Item.Category1 ?? "N/A")
-                            </MudChip>
-                        </CellTemplate>
-                    </PropertyColumn>
-                    
-                    <PropertyColumn Property="@(x => x.Status)" Title="Status" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
-                        <CellTemplate>
-                            <span class="status-badge @GetStatusClass(context.Item.Status)">@context.Item.Status.ToUpper()</span>
-                        </CellTemplate>
-                    </PropertyColumn>
-                    
-                    <PropertyColumn Property="@(x => x.TicketNumber)" Title="#" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
-                        <CellTemplate>
-                            <div class="d-flex align-center">
-                                @if (context.Item.ChildTickets != null && context.Item.ChildTickets.Any())
-                                {
-                                    <MudTooltip Text="Master-Ticket (enthält verknüpfte Sub-Tickets)">
-                                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Color="Color.Primary" Class="mr-2" />
+                    @foreach (var col in _columns.OrderBy(c => c.Order))
+                    {
+                        if (col.Id == "Itil" && col.Visible)
+                        {
+                            <TemplateColumn Title="" SortBy="@(x => x.Category1)" HeaderStyle="width:40px;">
+                                <CellTemplate>
+                                    <MudTooltip Text="@context.Item.Category1">
+                                        <MudIcon Icon="@GetItilIcon(context.Item.Category1)" Color="@GetItilColor(context.Item.Category1)" Size="Size.Small" />
                                     </MudTooltip>
-                                }
-                                else if (context.Item.MasterTicketId.HasValue)
-                                {
-                                    <MudTooltip Text="Sub-Ticket">
-                                        <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
-                                    </MudTooltip>
-                                }
-                                <MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default" Underline="Underline.None" Class="font-weight-bold">
-                                    @context.Item.TicketNumber
-                                </MudLink>
-                            </div>
-                        </CellTemplate>
-                    </PropertyColumn>
-                    
-                    <PropertyColumn Property="@(x => x.CreatedAt)" Title="Erstellt am" Sortable="true" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
-                        <CellTemplate>
-                            @ThemeService.FormatDate(context.Item.CreatedAt, "dd.MM.yyyy HH:mm")
-                        </CellTemplate>
-                    </PropertyColumn>
-
-                    <PropertyColumn Property="@(x => x.Title)" Title="Kurzbeschreibung">
-                        <CellTemplate>
-                            <MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default" Underline="Underline.Hover">
-                                @context.Item.Title
-                            </MudLink>
-                        </CellTemplate>
-                    </PropertyColumn>
-                    
-                    <PropertyColumn Property="@(x => x.Requester != null ? x.Requester.LastName : string.Empty)" Title="Kontakt" HeaderStyle="white-space: nowrap; width: 1%;" CellStyle="white-space: nowrap; width: 1%;">
-                        <CellTemplate>
-                            @($"{context.Item.Requester?.LastName}, {context.Item.Requester?.FirstName}")
-                        </CellTemplate>
-                    </PropertyColumn>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        }
+                        else if (col.Id == "Status" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Status)" Title="Status">
+                                <CellTemplate>
+                                    @{
+                                        var st = _ticketStatuses.FirstOrDefault(s => s.Name.Equals(context.Item.Status, StringComparison.OrdinalIgnoreCase));
+                                        string color = st?.Color ?? "#757575";
+                                        string icon = GetDynamicIcon(st?.Icon);
+                                    }
+                                    <div class="d-flex align-center" style="font-weight: 800; font-size: 0.75rem; color: @color;">
+                                        <MudIcon Icon="@icon" Size="Size.Small" Class="mr-2" />
+                                        @context.Item.Status.ToUpper()
+                                    </div>
+                                </CellTemplate>
+                            </PropertyColumn>
+                        }
+                        else if (col.Id == "Priority" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Priority)" Title="Priorität">
+                                <CellTemplate>
+                                    @{
+                                        var pr = _ticketPriorities.FirstOrDefault(p => p.Name.Equals(context.Item.Priority, StringComparison.OrdinalIgnoreCase));
+                                        string color = pr?.Color ?? "#333333";
+                                        string icon = GetDynamicIcon(pr?.Icon);
+                                    }
+                                    <div class="d-flex align-center" style="font-weight: 800; font-size: 0.75rem; color: @color;">
+                                        <MudIcon Icon="@icon" Size="Size.Small" Class="mr-2" />
+                                        @context.Item.Priority.ToUpper()
+                                    </div>
+                                </CellTemplate>
+                            </PropertyColumn>
+                        }
+                        else if (col.Id == "Number" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.TicketNumber)" Title="#" />
+                        }
+                        else if (col.Id == "Title" && col.Visible)
+                        {
+                            <PropertyColumn Property="@(x => x.Title)" Title="Betreff">
+                                <CellTemplate><MudLink Href="@($"/tickets/{context.Item.Id}")" Color="Color.Default">@context.Item.Title</MudLink></CellTemplate>
+                            </PropertyColumn>
+                        }
+                    }
                 </Columns>
             </MudDataGrid>
         }
     </div>
 </div>
 
-<!-- DYNAMISCHER MERGE DIALOG -->
-<MudDialog @bind-Visible="_mergeDialogVisible" Options="new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true }">
-    <TitleContent>
-        <div class="d-flex align-center">
-            <MudIcon Icon="@Icons.Material.Filled.CallMerge" Class="mr-2" Color="Color.Secondary" />
-            <MudText Typo="Typo.h6">Tickets zusammenführen</MudText>
-        </div>
-    </TitleContent>
-    <DialogContent>
-        <MudAlert Severity="Severity.Info" Class="mb-4">Wählen Sie das primäre Master-Ticket aus. Alle anderen gewählten Tickets werden als Sub-Tickets in dieses eingegliedert.</MudAlert>
-        <MudSelect T="Ticket" Label="Ziel (Master-Ticket)" @bind-Value="_selectedMasterForMerge" ToStringFunc="@(t => t == null ? "" : $"#{t.TicketNumber} - {t.Title}")" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
-            @if (_selectedItems != null)
-            {
-                foreach (var t in _selectedItems)
-                {
-                    <MudSelectItem Value="@t" />
-                }
-            }
-        </MudSelect>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _mergeDialogVisible = false)">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ExecuteMerge" Disabled="@(_selectedMasterForMerge == null || _isMerging)">
-            @if (_isMerging) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> } Zusammenführen
-        </MudButton>
-    </DialogActions>
-</MudDialog>
-
 @code {
     private List<Ticket>? _tickets;
     private string _searchString = "";
     private string? _activeFilter = null;
-    
-    // Merge Funktionalität
     private HashSet<Ticket> _selectedItems = new();
     private bool _mergeDialogVisible = false;
-    private Ticket? _selectedMasterForMerge;
-    private bool _isMerging = false;
+    private string _currentUserEmail = "";
+    private bool _showClosed = false;
+    
+    // DIE NEUEN STRUKTUREN
+    public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
+    public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
-    private static readonly JsonSerializerOptions _jsonOptions = new() 
-    { 
-        ReferenceHandler = ReferenceHandler.IgnoreCycles,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    private List<TicketStatusItem> _ticketStatuses = new();
+    private List<TicketPriorityItem> _ticketPriorities = new();
+
+    public class ColumnDef { public string Id { get; set; } = ""; public string Title { get; set; } = ""; public bool Visible { get; set; } = true; public int Order { get; set; } }
+    
+    private List<ColumnDef> _columns = new()
+    {
+        new() { Id = "Itil", Title = "ITIL", Order = 1 },
+        new() { Id = "Status", Title = "Status", Order = 2 },
+        new() { Id = "Priority", Title = "Priorität", Order = 3 },
+        new() { Id = "Number", Title = "Ticket-Nummer", Order = 4 },
+        new() { Id = "Title", Title = "Betreff", Order = 5 }
     };
 
-    private IEnumerable<Ticket> FilteredTickets => _tickets?
-        .Where(x => string.IsNullOrWhiteSpace(_searchString) || 
-                   (x.Title?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false) || 
-                   x.TicketNumber.ToString().Contains(_searchString)) ?? Enumerable.Empty<Ticket>();
+    public class SettingsDto {
+        public string TicketDefaultFilter { get; set; } = "Alle";
+        public bool TicketShowClosed { get; set; } = false;
+        public List<TicketStatusItem> TicketStatusList { get; set; } = new();
+        public List<TicketPriorityItem> TicketPriorityList { get; set; } = new();
+    }
+
+    private IEnumerable<Ticket> FilteredTickets => _tickets?.Where(x => 
+        (string.IsNullOrWhiteSpace(_searchString) || 
+         x.Title.Contains(_searchString, StringComparison.OrdinalIgnoreCase) || 
+         x.TicketNumber.ToString().Contains(_searchString)) &&
+         
+        (_showClosed || _activeFilter == x.Status || !x.Status.Equals("GESCHLOSSEN", StringComparison.OrdinalIgnoreCase)) &&
+        
+        (string.IsNullOrEmpty(_activeFilter) || _activeFilter == "Alle" ||
+         (_activeFilter == "Meins" && (x.Requester?.Email == _currentUserEmail || x.Supporter?.Email == _currentUserEmail)) ||
+         (_activeFilter == "NichtZugewiesen" && x.SupporterId == null) ||
+         (_activeFilter != "Meins" && _activeFilter != "NichtZugewiesen" && 
+            (x.Status.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) || 
+             x.Category1?.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase) == true ||
+             x.Priority.Equals(_activeFilter, StringComparison.OrdinalIgnoreCase))))
+    ) ?? Enumerable.Empty<Ticket>();
 
     protected override async Task OnInitializedAsync() {
         try { 
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            _currentUserEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "admin@infradesk.local";
+            
+            try {
+                var settings = await Http.GetFromJsonAsync<SettingsDto>("api/settings/masterdata");
+                if (settings != null) {
+                    _activeFilter = settings.TicketDefaultFilter;
+                    _showClosed = settings.TicketShowClosed;
+                    
+                    if (settings.TicketStatusList?.Any() == true) _ticketStatuses = settings.TicketStatusList;
+                    if (settings.TicketPriorityList?.Any() == true) _ticketPriorities = settings.TicketPriorityList;
+                }
+            } catch { }
+
+            // Fallback falls die Datenbank komplett leer ist
+            if (!_ticketStatuses.Any()) _ticketStatuses.Add(new TicketStatusItem { Name = "OFFEN", Color = "#2E7D32", Icon = "Adjust" });
+            if (!_ticketPriorities.Any()) _ticketPriorities.Add(new TicketPriorityItem { Name = "Normal", Color = "#1976D2", Icon = "Remove" });
+
             _tickets = await Http.GetFromJsonAsync<List<Ticket>>("api/tickets"); 
         }
         catch { _tickets = new(); }
     }
 
     private void SetFilter(string? filter) => _activeFilter = filter;
-
-    private async Task ExecuteMerge()
-    {
-        if (_selectedMasterForMerge == null) return;
-        
-        _isMerging = true;
-        
-        try 
-        {
-            var children = _selectedItems.Where(t => t.Id != _selectedMasterForMerge.Id).ToList();
-
-            foreach (var childOverview in children)
-            {
-                var fullChild = await Http.GetFromJsonAsync<Ticket>($"api/tickets/{childOverview.Id}");
-                if (fullChild != null)
-                {
-                    fullChild.MasterTicketId = _selectedMasterForMerge.Id;
-                    
-                    fullChild.Activities ??= new List<TicketActivity>();
-                    fullChild.Activities.Add(new TicketActivity {
-                        Id = Guid.NewGuid(),
-                        TicketId = fullChild.Id,
-                        AuthorName = "System",
-                        Content = $"Dieses Ticket wurde administrativ mit dem Master-Ticket <a href='/tickets/{_selectedMasterForMerge.Id}'>#{_selectedMasterForMerge.TicketNumber}</a> verknüpft.",
-                        Type = "System",
-                        IsPublic = true
-                    });
-
-                    await Http.PutAsJsonAsync($"api/tickets/{fullChild.Id}", fullChild, _jsonOptions);
-                }
-            }
-            
-            Snackbar.Add($"Erfolgreich! {children.Count} Tickets wurden zusammengeführt.", Severity.Success);
-            
-            _mergeDialogVisible = false;
-            _selectedItems.Clear();
-            _selectedMasterForMerge = null;
-            
-            await OnInitializedAsync(); 
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Fehler beim Zusammenführen: {ex.Message}", Severity.Error);
-        }
-        finally 
-        {
-            _isMerging = false;
-            StateHasChanged();
-        }
+    
+    private void OnRowClicked(DataGridRowClickEventArgs<Ticket> args) => Nav.NavigateTo($"/tickets/{args.Item.Id}");
+    
+    private void MoveColUp(ColumnDef col) {
+        if (col.Order > 1) { var prev = _columns.First(c => c.Order == col.Order - 1); prev.Order++; col.Order--; StateHasChanged(); }
+    }
+    private void MoveColDown(ColumnDef col) {
+        if (col.Order < _columns.Count) { var next = _columns.First(c => c.Order == col.Order + 1); next.Order--; col.Order++; StateHasChanged(); }
     }
 
-    private string GetStatusClass(string status) => (status ?? "").ToLower() switch {
-        "offen" => "status-offen",
-        "beantwortet" => "status-beantwortet",
-        "warten auf antwort" => "status-warten",
-        "aktiv" => "status-aktiv",
-        _ => ""
-    };
-
-    private string GetItilIcon(string? category) => category switch {
-        "Incident (Störung)" => Icons.Material.Filled.Bolt,
-        "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart,
-        "Change (Änderung)" => Icons.Material.Filled.Settings,
-        "Problem (Problem)" => Icons.Material.Filled.Search,
-        _ => Icons.Material.Filled.Label
-    };
-
-    private Color GetItilColor(string? category) => category switch {
-        "Incident (Störung)" => Color.Error,     
-        "Service Request (Serviceanfrage)" => Color.Info, 
-        "Change (Änderung)" => Color.Warning,    
-        "Problem (Problem)" => Color.Dark,       
-        _ => Color.Default
-    };
-
-    private async Task ExportCsv()
-    {
-        Snackbar.Add("CSV Export (T1_22) wird vorbereitet...");
+    // Wandelt einen Text in das native MudBlazor SVG-Icon um (Geniale Reflection!)
+    private string GetDynamicIcon(string? iconName) {
+        if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
+        try {
+            var field = typeof(Icons.Material.Filled).GetField(iconName);
+            if (field != null) return field.GetValue(null)?.ToString() ?? Icons.Material.Filled.Label;
+        } catch {}
+        return Icons.Material.Filled.Label;
     }
 
-    // Angepasste Import-Methode via nativen InputFileChangeEventArgs
-    private async Task ImportCsv(InputFileChangeEventArgs e)
-    {
-        var file = e.File;
-        if (file == null) return;
-        Snackbar.Add("CSV Import-Assistent (T1_20) wird gestartet...");
-    }
+    private void ExportCsv() => Snackbar.Add("CSV Export wird vorbereitet...");
+    private void ImportCsv(InputFileChangeEventArgs e) => Snackbar.Add("CSV Import gestartet...");
+    
+    private string GetItilIcon(string? c) => c switch { "Incident (Störung)" => Icons.Material.Filled.Bolt, "Service Request (Serviceanfrage)" => Icons.Material.Filled.ShoppingCart, "Change (Änderung)" => Icons.Material.Filled.Settings, "Problem (Problem)" => Icons.Material.Filled.Search, _ => Icons.Material.Filled.Label };
+    private Color GetItilColor(string? c) => c switch { "Incident (Störung)" => Color.Error, "Service Request (Serviceanfrage)" => Color.Info, "Change (Änderung)" => Color.Warning, "Problem (Problem)" => Color.Dark, _ => Color.Default };
 }

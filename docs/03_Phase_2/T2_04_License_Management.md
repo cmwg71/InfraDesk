@@ -1,30 +1,57 @@
-## Dateiname: T2_04_License_Management.md
+**Phase:** Stufe 2 (Erweiterte Kernfunktionen)  
+**Aufgabe:** Enterprise Software Asset Management (SAM)  
+**ID:** 024  
+**Status:** Enterprise-Ready
 
-Phase: Stufe 2 (Erweiterte Kernfunktionen) Aufgabe: Lizenzmanagement & Compliance-Indikatoren Beschreibung: Abgleich von installierter Software mit Soll-Zuweisungen. ID: 024
+Aufgabenstellung: SAM & Compliance-Steuerung
 
-# Aufgabenstellung: SAM & Compliance-Anzeige
+1. Beschreibung
 
-### Beschreibung
+Implementierung eines zentralen Moduls zur Verwaltung des Software-Lifecycles. Das Ziel ist die Herstellung einer ständigen Audit-Bereitschaft durch den automatisierten Abgleich von Lizenzansprüchen (Entitlements) mit der tatsächlichen Nutzung (Consumption).
 
-Verwaltung von Softwarelizenzen mit proaktiver Anzeige von Abweichungen zwischen Zuweisung und Scan-Ergebnis.
+2. Funktionsumfang (Enterprise-Standard)
 
-### Funktionsumfang
+2.1 Erweiterte Lizenz-Modelle
 
-1. **Lizenz-Objekt-Verknüpfung**: Manuelle Zuordnung von Lizenzen zu Assets oder Usern.
-    
-2. **Compliance-Abgleich**:
-    
-    - Vergleich der manuell festgelegten Anzahl mit der durch den Discovery-Worker festgestellten Installationsanzahl.
-        
-3. **Mismatch-Indikator**:
-    
-    - Visuelle Hervorhebung in der UI, wenn `Manuelle Zuweisung != Automatische Erkennung`.
-        
-    - Detailansicht zeigt die Differenz pro Asset-Klasse an.
-        
+- **Metriken:** Unterstützung verschiedener Lizenztypen (Per User, Per Device, Per Core/CPU, SaaS-Subskriptionen).
+- **Vertragsbindung:** Hinterlegung von Laufzeiten, Kündigungsfristen und Wartungsverträgen (Maintenance/Support) inkl. Dokumenten-Upload (Modul T1_10).
+- **Pool-Management:** Verwaltung von Volumenlizenzen (z. B. Microsoft M365 oder Adobe CC), bei denen ein Kontingent flexibel zugewiesen wird.
 
-### Abnahmekriterien
+2.2 Automatisierter Compliance-Engine
 
-- Das Dashboard zeigt eine Warnung bei Lizenz-Abweichungen.
-    
-- In der Asset-Ansicht ist sofort ersichtlich, ob die installierte Software durch zugewiesene Lizenzen gedeckt ist.
+- **Discovery-Abgleich:** Die Engine korreliert die Scan-Daten des Workers (T2_03) mit den Lizenz-Pools.
+- **Normalisierung:** Umwandlung verschiedener Software-Schreibweisen (z. B. "Acrobat Reader 2024" vs. "Adobe Acrobat Rdr") in ein einheitliches Software-Produkt mittels Alias-Tabellen.
+- **Überschuss-Analyse:** Identifikation von ungenutzten, aber lizenzierten Produkten (Potenzial zur Kosteneinsparung).
+
+2.3 Warn- & Eskalationswesen
+
+- **Mismatch-Indikator:** Dynamisches Dashboard (Rot/Gelb/Grün) für die Compliance-Rate pro Software-Hersteller.
+- **Proaktive Benachrichtigung (T1_09):** Automatische Warnung an den Lizenzmanager, wenn:
+    - Die Auslastung 90% erreicht.
+    - Ein Lizenzvertrag oder Support in 60 Tagen abläuft.
+    - Unerlaubte Software (Blacklist) vom Worker gefunden wurde.
+
+3. Technische Umsetzung
+
+3.1 Relationales Mapping
+
+- **n:m Beziehungen:** Eine Lizenz kann mehreren Assets zugeordnet sein; ein Asset kann Dutzende Lizenzen (OS, Office, Fachanwendungen) tragen.
+- **Zuweisungs-Logik:** Unterscheidung zwischen "Hard-Zuweisung" (manuell fixiert) und "Auto-Zuweisung" (basierend auf Scan-Regeln).
+
+3.2 Audit-Trail (Modul 012)
+
+- Revisionssichere Protokollierung jeder Lizenzübertragung und jeder Änderung am Lizenzbestand für externe Wirtschaftsprüfer.
+
+4. Workflow (Software-Audit)
+
+5. **Input:** Einkauf hinterlegt 100 Lizenzen für "Produkt X".
+6. **Scan:** Worker meldet 115 Installationen im Netzwerk.
+7. **Alert:** System erzeugt sofort einen "Compliance-Incident" und markiert die 15 überzähligen Assets.
+8. **Action:** Lizenzmanager entscheidet: Nachkauf oder Deinstallation (Workflow-Trigger).
+
+9. Abnahmekriterien
+
+- **Compliance-Dashboard:** Zentrale Ansicht aller kritischen Abweichungen in Echtzeit.
+- **Drill-Down:** Klick auf eine Lizenz-Warnung zeigt exakt die betroffenen Assets an.
+- **Vertrags-Reminder:** Benachrichtigungs-Engine löst korrekt bei Ablaufdatum aus.
+- **Software-Katalog:** Möglichkeit zur Definition einer "White-List" (erlaubte Standardsoftware).
