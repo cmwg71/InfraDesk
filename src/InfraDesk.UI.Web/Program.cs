@@ -16,8 +16,7 @@ builder.Services.AddMudServices();
 // 3. Eigene Services registrieren
 builder.Services.AddScoped<ThemeService>();
 
-// FIX: Der UpdateService fehlte in der Registrierung! 
-// Wir registrieren ihn hier als Typed HttpClient.
+// Registrierung des UpdateServices als Typed HttpClient
 builder.Services.AddHttpClient<UpdateService>();
 
 // 4. Authentifizierung (IAM / RBAC) registrieren
@@ -25,10 +24,11 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<InfraDeskAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<InfraDeskAuthStateProvider>());
 
-// 5. HttpClient Registrierung für die Kommunikation mit der API
+// 5. HttpClient Registrierung für die Kommunikation mit dem Backend (API)
+// Hier wird NICHT das EntityFramework oder Swagger benötigt, da dies nur der Client ist.
 builder.Services.AddHttpClient("InfraDeskAPI", client =>
 {
-    // Die URL sollte dem Port deines API-Projekts entsprechen
+    // Die URL des API-Backends (Port 7274 ist Standard laut deinen Logs)
     client.BaseAddress = new Uri("https://localhost:7274/");
 });
 
@@ -46,7 +46,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
-// WICHTIG für .NET 8: Antiforgery muss vor den Komponenten stehen
+// Antiforgery für .NET 8 Sicherheit
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()

@@ -26,15 +26,23 @@
     .info-label { font-weight: bold; color: #666; font-size: 0.85rem; display: flex; align-items: center; }
     .info-value { font-weight: 600; color: #333; font-size: 0.9rem; display: flex; align-items: center; }
     
-    .status-ok-text { color: #2e7d32; font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
-    .status-update-text { color: var(--mud-palette-primary); font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; }
+    .status-ok-text { color: #2e7d32; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; background: #e8f5e9; padding: 4px 12px; border-radius: 4px; border: 1px solid #c8e6c9; }
+    .status-update-text { color: #c62828; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; background: #ffebee; padding: 4px 12px; border-radius: 4px; border: 1px solid #ffcdd2; }
+    .status-error-text { color: #666; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; background: #f5f5f5; padding: 4px 12px; border-radius: 4px; border: 1px solid #e0e0e0; }
     
     .color-preview { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; margin-right: 12px; }
     .footer-copyright { text-align: center; color: #999; font-size: 0.75rem; padding: 20px 0; width: 100%; }
-    .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
-    
-    /* Monochromatischer Logo-Stil für den Info-Bereich */
     .info-logo-monochrome { height: 60px; margin-bottom: 16px; filter: grayscale(100%) brightness(0); opacity: 0.8; }
+    .token-code { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: var(--mud-palette-primary); }
+
+    /* Label Preview Styles */
+    .label-preview-container { display: flex; justify-content: center; padding: 20px; background: #999; border-radius: 8px; }
+    .physical-label { background: white; padding: 4mm; box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: sans-serif; overflow: hidden; }
+    .label-header { border-bottom: 1px solid #eee; width: 100%; text-align: center; font-weight: bold; margin-bottom: 2mm; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+    .barcode-svg-mock { width: 100%; height: 10mm; background: repeating-linear-gradient(90deg, #000, #000 1px, #fff 1px, #fff 3px); margin-bottom: 1mm; }
+    .qr-white-inner { background: white; padding: 2px; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; position: relative; }
+    .qr-logo-overlay { position: absolute; background: white; padding: 1px; border-radius: 2px; }
+    .label-footer { border-top: 1px solid #eee; width: 100%; text-align: center; font-size: 0.6rem; margin-top: 2mm; color: #666; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 </style>
 
 <div class="pdq-toolbar">
@@ -79,9 +87,8 @@
                 <div class="pdq-section-header">Organisation & Anschrift</div>
                 <MudGrid Spacing="2">
                     <MudItem xs="12" md="8"><MudTextField @bind-Value="_masterData.CompanyName" Label="Offizieller Firmenname" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
-                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präprefix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.CompanyPrefix" Label="Asset-Präfix (3 Stellen)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" HelperText="z.B. GIT für Grams IT" Required="true" /></MudItem>
                     <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Domain" Label="E-Mail Domäne" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="firma.de" /></MudItem>
-                    
                     <MudItem xs="12" md="12"><MudTextField @bind-Value="_masterData.Street" Label="Straße & Hausnummer" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.ZipCity" Label="PLZ & Ort" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" /></MudItem>
                     <MudItem xs="12" md="4"><MudTextField @bind-Value="_masterData.State" Label="Bundesland" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
@@ -97,87 +104,10 @@
                     </MudItem>
                 </MudGrid>
             }
-            else if (_activeSection == "TicketViews")
-            {
-                <div class="pdq-section-header">Ticket-Queue & Filter-Optionen</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, was Agenten und Benutzer sehen, wenn sie den Service-Desk öffnen.</MudText>
-                
-                <MudGrid Spacing="3">
-                    <MudItem xs="12" md="6">
-                        <MudCard Outlined="true" Class="h-100">
-                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1" Class="font-weight-bold">Standard-Listenansicht</MudText></CardHeaderContent></MudCardHeader>
-                            <MudCardContent>
-                                <MudSelect T="string" Label="Primärer Filter beim Öffnen" @bind-Value="_masterData.TicketDefaultFilter" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
-                                    <MudSelectItem Value="@("Alle")">Alle Tickets anzeigen</MudSelectItem>
-                                    <MudSelectItem Value="@("Meins")">Nur eigene Tickets anzeigen (Zugewiesen)</MudSelectItem>
-                                    <MudSelectItem Value="@("NichtZugewiesen")">Nur nicht zugewiesene anzeigen (Warteschlange)</MudSelectItem>
-                                </MudSelect>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">Dieser Filter ist sofort aktiv, wenn das Service-Desk Modul aufgerufen wird.</MudText>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudCard Outlined="true" Class="h-100">
-                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1" Class="font-weight-bold">Sichtbarkeit & Archiv</MudText></CardHeaderContent></MudCardHeader>
-                            <MudCardContent>
-                                <MudSwitch T="bool" @bind-Value="_masterData.TicketShowClosed" Label="Geschlossene Tickets standardmäßig einblenden" Color="Color.Primary" Class="mb-2" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">Wenn deaktiviert, werden geschlossene/archivierte Tickets initial aus der Liste gefiltert, um die Übersichtlichkeit zu erhöhen.</MudText>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                </MudGrid>
-            }
-            else if (_activeSection == "TicketLifecycle")
-            {
-                <div class="pdq-section-header">Ticket Status (Workflow)</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Klicken Sie in eine Zelle der Tabelle, um Namen, Farbe oder Icon zu bearbeiten.</MudText>
-                
-                <MudDataGrid Items="@_masterData.TicketStatusList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Name" Title="Status-Name" />
-                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
-                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
-                        <TemplateColumn Title="Vorschau" Editable="false">
-                            <CellTemplate>
-                                <MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
-                            <CellTemplate>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Remove(context.Item))" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                </MudDataGrid>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Add(new TicketStatusItem{Name="NEU", Color="#757575", Icon="Label"}))">Neuen Status hinzufügen</MudButton>
-
-                <div class="pdq-section-header mt-8">Ticket Prioritäten</div>
-                <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Klassifizieren Sie die Dringlichkeit von IT-Störungen und Anfragen.</MudText>
-
-                <MudDataGrid Items="@_masterData.TicketPriorityList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
-                    <Columns>
-                        <PropertyColumn Property="x => x.Name" Title="Prioritäts-Name" />
-                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
-                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
-                        <TemplateColumn Title="Vorschau" Editable="false">
-                            <CellTemplate>
-                                <MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
-                            <CellTemplate>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Remove(context.Item))" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                </MudDataGrid>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Add(new TicketPriorityItem{Name="NEU", Color="#333333", Icon="Flag"}))">Neue Priorität hinzufügen</MudButton>
-            }
             else if (_activeSection == "Lifecycle")
             {
                 <div class="pdq-section-header">Asset-Lebenszyklus Phasen & Status</div>
                 <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">Definieren Sie hier, welche Zustände ein Hardware- oder Software-Asset in Ihrem Unternehmen durchlaufen kann.</MudText>
-                
                 @foreach (var group in _lifecycleConfig)
                 {
                     <MudPaper Outlined="true" Class="pa-4 mb-4" Style="background: #fafafa;">
@@ -203,17 +133,6 @@
                     <MudText Typo="Typo.caption" Class="font-weight-bold mb-2 d-block">VORSCHAU:</MudText>
                     <MudText Typo="Typo.body1" Style="font-family: monospace; font-weight: bold; font-size: 1.2rem; background: #eee; padding: 12px; border-radius: 4px;">@GetTagPreview()</MudText>
                 </MudPaper>
-
-                <div class="pdq-section-header">Verfügbare Platzhalter</div>
-                <MudSimpleTable Dense="true" Bordered="true" Elevation="0" Class="mt-2 mb-8">
-                    <thead><tr><th style="width: 150px;">Kürzel</th><th>Bedeutung</th><th>Beispiel</th></tr></thead>
-                    <tbody>
-                        <tr><td><span class="token-code">{COMP}</span></td><td>Firmen-Präfix</td><td>@(_masterData.CompanyPrefix ?? "GIT")</td></tr>
-                        <tr><td><span class="token-code">{LOC}</span></td><td>Standort-Kürzel</td><td>FRA</td></tr>
-                        <tr><td><span class="token-code">{CAT}</span></td><td>Kategorie-Kürzel</td><td>SRV</td></tr>
-                        <tr><td><span class="token-code">{NUM:n}</span></td><td>Laufende Nummer</td><td>00042</td></tr>
-                    </tbody>
-                </MudSimpleTable>
 
                 <div class="pdq-section-header">Barcode & QR-Code Konfiguration</div>
                 <MudGrid Spacing="3">
@@ -260,7 +179,6 @@
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
-
                     <MudItem xs="12" md="4">
                         <MudText Typo="Typo.subtitle2" Class="font-weight-bold mb-2">LIVE-VORSCHAU (ETIKETT)</MudText>
                         <div class="label-preview-container">
@@ -285,28 +203,67 @@
                     </MudItem>
                 </MudGrid>
             }
-            else if (_activeSection == "Design")
+            else if (_activeSection == "TicketViews")
             {
-                <div class="pdq-section-header">Oberfläche & Design</div>
+                <div class="pdq-section-header">Ticket-Queue & Filter-Optionen</div>
                 <MudGrid Spacing="3">
                     <MudItem xs="12" md="6">
-                        <MudCard Outlined="true">
-                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1">Modus & Grundfarben</MudText></CardHeaderContent></MudCardHeader>
+                        <MudCard Outlined="true" Class="h-100">
                             <MudCardContent>
-                                <MudSwitch T="bool" Value="@ThemeService.Config.IsDark" ValueChanged="OnDarkModeChanged" Color="Color.Primary" Label="Dunkelmodus" />
-                                <MudColorPicker Label="Primärfarbe" @bind-Text="_tempPrimaryColor" @bind-Text:after="ApplyColor" />
+                                <MudSelect T="string" Label="Standard-Filter beim Öffnen" @bind-Value="_masterData.TicketDefaultFilter" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                                    <MudSelectItem Value="@("Alle")">Alle Tickets</MudSelectItem>
+                                    <MudSelectItem Value="@("Meins")">Nur eigene Tickets</MudSelectItem>
+                                    <MudSelectItem Value="@("NichtZugewiesen")">Warteschlange</MudSelectItem>
+                                </MudSelect>
+                                <MudSwitch T="bool" @bind-Value="_masterData.TicketShowClosed" Label="Geschlossene standardmäßig einblenden" Color="Color.Primary" />
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
+                </MudGrid>
+            }
+            else if (_activeSection == "TicketLifecycle")
+            {
+                <div class="pdq-section-header">Ticket Status (Workflow)</div>
+                <MudDataGrid Items="@_masterData.TicketStatusList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="Status-Name" />
+                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
+                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
+                        <TemplateColumn Title="Vorschau" Editable="false">
+                            <CellTemplate><MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" /></CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
+                            <CellTemplate><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Remove(context.Item))" /></CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketStatusList.Add(new TicketStatusItem{Name="NEU", Color="#757575", Icon="Label"}))">Neuen Status hinzufügen</MudButton>
+
+                <div class="pdq-section-header mt-8">Ticket Prioritäten</div>
+                <MudDataGrid Items="@_masterData.TicketPriorityList" Dense="true" EditMode="DataGridEditMode.Cell" ReadOnly="false" Bordered="true" Elevation="0" Class="mb-4">
+                    <Columns>
+                        <PropertyColumn Property="x => x.Name" Title="Prioritäts-Name" />
+                        <PropertyColumn Property="x => x.Color" Title="Farbe (Hex)" />
+                        <PropertyColumn Property="x => x.Icon" Title="Material Icon Name" />
+                        <TemplateColumn Title="Vorschau" Editable="false">
+                            <CellTemplate><MudIcon Icon="@GetDynamicIcon(context.Item.Icon)" Style="@($"color: {context.Item.Color}")" Size="Size.Small" /></CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn CellClass="d-flex justify-end" Editable="false">
+                            <CellTemplate><MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Remove(context.Item))" /></CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => _masterData.TicketPriorityList.Add(new TicketPriorityItem{Name="NEU", Color="#333333", Icon="Flag"}))">Neue Priorität hinzufügen</MudButton>
+            }
+            else if (_activeSection == "Design")
+            {
+                <div class="pdq-section-header">Oberfläche & Themes</div>
+                <MudGrid Spacing="3">
                     <MudItem xs="12" md="6">
                         <MudCard Outlined="true">
-                            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.subtitle1">Design-Paletten (Presets)</MudText></CardHeaderContent></MudCardHeader>
                             <MudCardContent>
-                                <MudList T="string" Clickable="true" @bind-SelectedValue="_selectedPalette">
-                                    <MudListItem Text="Corporate Blue" OnClick="@(() => SelectPalette("#004a99"))"><div class="d-flex align-center"><div class="color-preview" style="background:#004a99"></div>Corporate Blue</div></MudListItem>
-                                    <MudListItem Text="Midnight Ocean" OnClick="@(() => SelectPalette("#0a192f"))"><div class="d-flex align-center"><div class="color-preview" style="background:#0a192f"></div>Midnight Deep Ocean</div></MudListItem>
-                                    <MudListItem Text="Forest Green" OnClick="@(() => SelectPalette("#1b4332"))"><div class="d-flex align-center"><div class="color-preview" style="background:#1b4332"></div>Nature Inspired</div></MudListItem>
-                                </MudList>
+                                <MudSwitch T="bool" Value="@ThemeService.Config.IsDark" ValueChanged="OnDarkModeChanged" Color="Color.Primary" Label="Dunkelmodus" />
+                                <MudColorPicker Label="Primärfarbe" @bind-Text="_tempPrimaryColor" @bind-Text:after="ApplyColor" />
                             </MudCardContent>
                         </MudCard>
                     </MudItem>
@@ -315,32 +272,25 @@
             else if (_activeSection == "Info")
             {
                 <div class="text-center mb-8">
-                    @* KORREKTUR: Logo nutzt nun einfarbige Optik via CSS-Filter *@
                     <img src="InfraDesk_Logo.png" alt="InfraDesk" class="info-logo-monochrome" />
                     <MudText Typo="Typo.h4" Style="font-weight: 900; color: #333;">InfraDesk Enterprise</MudText>
                 </div>
                 <div class="info-grid">
                     <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-2" /> Version</div>
+                    <div class="info-value">@_currentVersion</div>
+                    <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Verified" Size="Size.Small" Class="mr-2" /> Release Status</div>
                     <div class="info-value">
-                        @_currentVersion
-                        @if (_isChecking) { 
-                            <MudProgressCircular Color="Color.Default" Indeterminate="true" Size="Size.Small" Class="ml-4" Style="width:16px; height:16px;"/> 
-                        }
+                        @if (_isChecking) { <div class="d-flex align-center"><MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" Style="width:16px; height:16px;" /><MudText Typo="Typo.caption" Class="ml-2">Prüfung...</MudText></div> }
                         else if (_updateChecked) {
-                            @if (_updateFound) { 
-                                <span class="status-update-text ml-4"><MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" /> Update verfügbar (@_latestVersion)</span> 
-                            }
-                            else { 
-                                <span class="status-ok-text ml-4"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" /> Version aktuell</span> 
-                            }
+                            @if (_updateFound) { <div class="status-update-text"><MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" />Update verfügbar! (v<b>@_latestVersion</b>)</div> }
+                            else { <div class="status-ok-text"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />Ihre Version ist aktuell.</div> }
                         }
+                        else { <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CheckForUpdates">Jetzt prüfen</MudButton> }
                     </div>
                     <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" Class="mr-2" /> Entwicklung</div>
                     <div class="info-value">Christian Grams (Grams IT)</div>
-                    <div class="info-label"><MudIcon Icon="@Icons.Material.Filled.Verified" Size="Size.Small" Class="mr-2" /> Lizenz</div>
-                    <div class="info-value"><MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Enterprise Subscription</MudChip></div>
                 </div>
-                <div class="footer-copyright">© 2026 Grams IT</div>
+                <div class="footer-copyright">© 2026 Grams IT. Alle Rechte vorbehalten.</div>
             }
         }
     </div>
@@ -350,15 +300,10 @@
     private string _activeSection = "MasterData";
     private bool _isLoading = true;
     private bool _isSaving = false;
-
     private MasterDataDto _masterData = new();
     private List<string> _timeZones = new();
     private Dictionary<string, List<string>> _lifecycleConfig = new();
-
     private string _tempPrimaryColor = "#004a99";
-    private string _selectedPalette = "Corporate Blue";
-
-    // Dynamische Ermittlung der Version aus der Assembly
     private string _currentVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unbekannt";
     private bool _isChecking = false;
     private bool _updateChecked = false;
@@ -371,19 +316,14 @@
         try
         {
             _masterData = await Http.GetFromJsonAsync<MasterDataDto>("api/settings/masterdata") ?? new();
-            _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle") ?? new();
-            _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new();
-            
-            if (string.IsNullOrWhiteSpace(_masterData.AssetTagPattern)) _masterData.AssetTagPattern = "{COMP}-{LOC}-{CAT}-{NUM:5}";
-            
+            try { _lifecycleConfig = await Http.GetFromJsonAsync<Dictionary<string, List<string>>>("api/settings/dynamic/asset-lifecycle") ?? new(); } catch { _lifecycleConfig = new(); }
+            try { _timeZones = await Http.GetFromJsonAsync<List<string>>("api/settings/timezones") ?? new(); } catch { _timeZones = new List<string> { "W. Europe Standard Time" }; }
             _masterData.TicketStatusList ??= new();
             _masterData.TicketPriorityList ??= new();
-            
             _tempPrimaryColor = ThemeService.Config.PrimaryColor;
-            
             _ = CheckForUpdates();
         }
-        catch { Snackbar.Add("Fehler beim Laden der Einstellungen.", Severity.Error); }
+        catch { Snackbar.Add("Ladefehler.", Severity.Error); }
         finally { _isLoading = false; }
     }
 
@@ -394,17 +334,38 @@
         _isSaving = true;
         try
         {
-            if (_activeSection == "MasterData" || _activeSection == "TagSchema" || _activeSection == "TicketViews" || _activeSection == "TicketLifecycle")
-                await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
-            else if (_activeSection == "Lifecycle")
+            if (_activeSection == "Lifecycle")
                 await Http.PostAsJsonAsync("api/settings/dynamic/asset-lifecycle", _lifecycleConfig);
+            else
+                await Http.PostAsJsonAsync("api/settings/masterdata", _masterData);
             
             Snackbar.Add("Erfolgreich gespeichert.", Severity.Success);
         }
-        catch { Snackbar.Add("Fehler beim Speichern.", Severity.Error); }
+        catch { Snackbar.Add("Speicherfehler.", Severity.Error); }
         finally { _isSaving = false; }
     }
-    
+
+    private async Task CheckForUpdates()
+    {
+        if (_isChecking) return;
+        _isChecking = true; _updateChecked = false;
+        await InvokeAsync(StateHasChanged);
+        try {
+            var release = await UpdateService.GetLatestReleaseAsync();
+            if (release != null) {
+                _latestVersion = release.TagName;
+                _updateFound = _latestVersion.TrimStart('v','V') != _currentVersion;
+                _updateChecked = true;
+            }
+        } catch { _updateChecked = false; }
+        finally { _isChecking = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private void OnDarkModeChanged(bool isDark) { var cfg = ThemeService.Config; cfg.IsDark = isDark; ThemeService.UpdateConfig(cfg); }
+    private void ApplyColor() { var cfg = ThemeService.Config; cfg.PrimaryColor = _tempPrimaryColor; ThemeService.UpdateConfig(cfg); }
+    private void RemoveStatus(string g, string s) { if (_lifecycleConfig.ContainsKey(g)) { _lifecycleConfig[g].Remove(s); OnFieldChanged(); } }
+    private void AddStatus(string g) { if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new(); _lifecycleConfig[g].Add("NEU"); OnFieldChanged(); }
+
     private string GetDynamicIcon(string? iconName) {
         if (string.IsNullOrWhiteSpace(iconName)) return Icons.Material.Filled.Label;
         try {
@@ -414,110 +375,35 @@
         return Icons.Material.Filled.Label;
     }
 
-    private string GetTagPreview()
-    {
-        var pattern = _masterData.AssetTagPattern ?? "{COMP}-{LOC}-{CAT}-{NUM:5}";
-        return pattern.Replace("{COMP}", _masterData.CompanyPrefix ?? "GIT").Replace("{LOC}", "FRA").Replace("{CAT}", "SRV").Replace("{NUM:5}", "00001");
-    }
+    private string GetTagPreview() => (_masterData.AssetTagPattern ?? "{COMP}-{LOC}-{CAT}-{NUM:5}")
+        .Replace("{COMP}", _masterData.CompanyPrefix ?? "GIT").Replace("{LOC}", "FRA").Replace("{CAT}", "SRV").Replace("{NUM:5}", "00001");
 
-    private void ApplyTemplateDimensions()
-    {
+    private void ApplyTemplateDimensions() {
         switch (_masterData.LabelTemplate) {
             case "Brother DK-11201 (29x90mm)": _masterData.LabelWidth = 90; _masterData.LabelHeight = 29; break;
             case "Brother DK-11209 (29x62mm)": _masterData.LabelWidth = 62; _masterData.LabelHeight = 29; break;
             case "Zebra Desktop 4x2 (102x51mm)": _masterData.LabelWidth = 102; _masterData.LabelHeight = 51; break;
-            case "Avery Zweckform 70x37mm": _masterData.LabelWidth = 70; _masterData.LabelHeight = 37; break;
         }
-        OnFieldChanged();
+        StateHasChanged();
     }
 
-    private async Task PrintTestLabel()
-    {
+    private async Task PrintTestLabel() {
         string tag = GetTagPreview();
         string company = _masterData.PrintCompanyName ? _masterData.CompanyName : "";
-        string assetName = _masterData.PrintAssetName ? "TEST-SERVER-01" : "";
-        string serial = _masterData.PrintSerialNumber ? "| SN-9938" : "";
+        string assetName = "TEST-SERVER-01";
         
-        string qrSvg = "<svg viewBox='0 0 24 24' fill='black' width='48' height='48'><path d='M3 3H9V9H3V3ZM5 5V7H7V5H5ZM15 3H21V9H15V3ZM17 5V7H19V5H17ZM3 15H9V21H3V15ZM5 17V19H7V17H5ZM15 15H17V17H15V15ZM17 17H19V19H17V17ZM19 15H21V17H19V15ZM15 19H17V21H15V19ZM19 19H21V21H19V19ZM17 13H19V15H17V13ZM13 3H15V5H13V3ZM11 3H13V5H11V3ZM13 11H15V13H13V11ZM11 11H13V13H11V11ZM11 13H13V15H11V13ZM13 15H15V17H13V15ZM3 11H5V13H3V11ZM5 11H7V13H5V11ZM7 11H9V13H7V11ZM3 13H5V15H3V13ZM5 13H7V15H5V13ZM7 13H9V15H7V13ZM11 7H13V9H11V7ZM13 7H15V9H13V7ZM11 9H13V11H11V9ZM13 9H15V11H13V9ZM15 11H17V13H15V11ZM17 11H19V13H17V11ZM19 11H21V13H19V11ZM21 11H23V13H21V11ZM21 13H23V15H21V13ZM21 15H23V17H21V15ZM21 17H23V19H21V17ZM21 19H23V21H21V19ZM19 21H21V23H19V21ZM17 21H19V23H17V21ZM15 21H17V23H15V21ZM13 21H15V23H13V21ZM11 21H13V23H11V21ZM9 21H11V23H9V21ZM7 21H9V23H7V21ZM5 21H7V23H5V21ZM3 21H5V23H3V21Z'/></svg>";
-
-        string companyHtml = string.IsNullOrEmpty(company) ? "" : "<div style='font-size: 8pt; font-weight: bold; border-bottom: 0.1mm solid #eee; width: 100%; padding-bottom: 0.5mm; margin-bottom: 1mm;'>" + company + "</div>";
-        string tagHtml = _masterData.ShowTextBelowBarcode ? "<div style='font-size: 7pt; font-weight:bold; font-family: monospace;'>" + tag + "</div>" : "";
-        string footerHtml = "<div style='font-size: 6pt; color: #444; border-top: 0.1mm solid #eee; width: 100%; padding-top: 0.5mm;'>" + assetName + " " + serial + "</div>";
-
-        string html = "<html><head><style>" +
-            "body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; background: white; } " +
-            "@page { size: " + _masterData.LabelWidth + "mm " + _masterData.LabelHeight + "mm; margin: 0; } " +
-            ".label { width: " + _masterData.LabelWidth + "mm; height: " + _masterData.LabelHeight + "mm; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-family: sans-serif; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; } " +
-            ".barcode { width: 100%; height: 8mm; background: repeating-linear-gradient(90deg, #000, #000 0.5mm, #fff 0.5mm, #fff 1mm); margin-bottom: 1mm; } " +
-            ".content { display: flex; width: 100%; align-items: center; justify-content: space-around; flex: 1; } " +
-            ".qr { width: 12mm; height: 12mm; }" +
+        string html = "<html><head><style>body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; } " +
+            ".label { width: " + _masterData.LabelWidth + "mm; height: " + _masterData.LabelHeight + "mm; border: 0.1mm solid #ccc; padding: 2mm; text-align: center; display: flex; flex-direction: column; justify-content: space-between; } " +
             "</style></head><body onload='window.print();window.close();'>" +
-            "<div class='label'>" + companyHtml + 
-            "<div class='content'><div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden;'>" +
-            "<div class='barcode'></div>" + tagHtml + "</div><div class='qr'>" + qrSvg + "</div></div>" +
-            footerHtml + "</div></body></html>";
-
-        string base64Html = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html));
-        await JSRuntime.InvokeVoidAsync("eval", "var w = window.open('', '_blank'); w.document.write(atob('" + base64Html + "')); w.document.close();");
-    }
-
-    private void OnDarkModeChanged(bool isDark) { 
-        var cfg = ThemeService.Config;
-        cfg.IsDark = isDark; 
-        ThemeService.UpdateConfig(cfg); 
-    }
-    
-    private void ApplyColor() { 
-        var cfg = ThemeService.Config;
-        cfg.PrimaryColor = _tempPrimaryColor; 
-        ThemeService.UpdateConfig(cfg); 
-    }
-    
-    private void SelectPalette(string hex) { _tempPrimaryColor = hex; ApplyColor(); }
-    
-    private void RemoveStatus(string g, string s) {
-        if (_lifecycleConfig.ContainsKey(g)) {
-            _lifecycleConfig[g].Remove(s);
-            OnFieldChanged();
-        }
-    }
-    
-    private void AddStatus(string g) { 
-        if(!_lifecycleConfig.ContainsKey(g)) _lifecycleConfig[g] = new List<string>(); 
-        _lifecycleConfig[g].Add("NEUER STATUS"); 
-        OnFieldChanged(); 
-    }
-
-    private async Task CheckForUpdates()
-    {
-        if (_isChecking) return;
-        _isChecking = true; 
-        await InvokeAsync(StateHasChanged);
-        
-        try 
-        {
-            var release = await UpdateService.GetLatestReleaseAsync();
-            if (release != null && !string.IsNullOrWhiteSpace(release.TagName)) 
-            {
-                _latestVersion = release.TagName;
-                string cleanLatest = _latestVersion.TrimStart('v', 'V');
-                _updateFound = cleanLatest != _currentVersion;
-                _updateChecked = true;
-            }
-        } 
-        catch { }
-        finally 
-        { 
-            _isChecking = false; 
-            await InvokeAsync(StateHasChanged); 
-        }
+            "<div class='label'><div>" + company + "</div><div style='font-size: 1.2em; font-weight: bold;'>" + tag + "</div><div>" + assetName + "</div></div></body></html>";
+            
+        await JSRuntime.InvokeVoidAsync("eval", "var w = window.open(); w.document.write(atob('" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html)) + "')); w.document.close();");
     }
 
     public class TicketStatusItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#757575"; public string Icon { get; set; } = "Adjust"; }
     public class TicketPriorityItem { public string Name { get; set; } = ""; public string Color { get; set; } = "#333333"; public string Icon { get; set; } = "Flag"; }
 
-    public class MasterDataDto
-    {
+    public class MasterDataDto {
         public string CompanyName { get; set; } = "";
         public string CompanyPrefix { get; set; } = "";
         public string Domain { get; set; } = "";
@@ -538,7 +424,6 @@
         public bool PrintCompanyName { get; set; } = true;
         public bool PrintSerialNumber { get; set; } = false;
         public int PrintResolutionDpi { get; set; } = 300;
-        
         public string TicketDefaultFilter { get; set; } = "Alle";
         public bool TicketShowClosed { get; set; } = false;
         public List<TicketStatusItem> TicketStatusList { get; set; } = new();
